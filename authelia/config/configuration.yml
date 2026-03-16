@@ -1,0 +1,35 @@
+---
+server:
+  address: 'tcp://:9091/authelia'
+
+log:
+  level: 'warn'
+
+identity_validation:
+  reset_password:
+    jwt_secret: 'hyperfocus_reset_secret_2026_change_me'
+
+authentication_backend:
+  file:
+    path: '/config/users_database.yml'
+
+session:
+  secret: 'hyperfocus_session_secret_change_me_2026'
+  cookies:
+    - domain: 'rosetta.chat'
+      authelia_url: 'https://rosetta.chat/authelia/'
+      default_redirection_url: 'https://rosetta.chat'
+
+storage:
+  encryption_key: 'hyperfocus_storage_encryption_key_minimum_20_chars_2026'
+  local:
+    path: '/config/db.sqlite3'
+
+notifier:
+  filesystem:
+    filename: '/config/notification.txt'
+
+access_control:
+  default_policy: 'one_factor'
+
+theme: dark

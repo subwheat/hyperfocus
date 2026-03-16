@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Backups
+*.bak.*
+*.bak
+
+# Secrets
+.env
+*.env
+authelia/config/db.sqlite3
+authelia/config/notification.txt
+authelia/config/users_database.yml
+
+# Data
+/data/
+*.db
+
+# Docker
+docker-compose.yml.bak*
+.backup/

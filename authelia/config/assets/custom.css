@@ -1,0 +1,71 @@
+:root {
+    --color-bg: #1c1917;
+    --color-bg-secondary: #292524;
+    --color-border: #3a3533;
+    --color-text: #fafaf9;
+    --color-text-secondary: #a8a29e;
+    --color-accent: #2563eb;
+    --color-accent-hover: #1d4ed8;
+    --font: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+}
+
+body {
+    background: var(--color-bg) !important;
+    font-family: var(--font) !important;
+    color: var(--color-text) !important;
+}
+
+.v-application {
+    background: var(--color-bg) !important;
+}
+
+.card {
+    background: var(--color-bg-secondary) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4) !important;
+}
+
+.v-input__slot {
+    background: var(--color-bg) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 8px !important;
+}
+
+.v-input__slot input {
+    color: var(--color-text) !important;
+    font-family: var(--font) !important;
+}
+
+.v-label {
+    color: var(--color-text-secondary) !important;
+    font-family: var(--font) !important;
+}
+
+.v-btn.primary {
+    background: var(--color-accent) !important;
+    border-radius: 8px !important;
+    font-family: var(--font) !important;
+    font-weight: 500 !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+}
+
+.v-btn.primary:hover {
+    background: var(--color-accent-hover) !important;
+}
+
+.application--wrap {
+    background: var(--color-bg) !important;
+}
+
+h1, h2, h3, p, span, label {
+    font-family: var(--font) !important;
+    color: var(--color-text) !important;
+}
+
+.v-card__title {
+    color: var(--color-text) !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+}

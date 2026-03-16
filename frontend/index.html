@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hyperfocus</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #fafaf9; --bg-secondary: #f5f5f4; --bg-tertiary: #e7e5e4; --bg-terminal: #1c1917;
+            --text-primary: #1c1917; --text-secondary: #57534e; --text-tertiary: #a8a29e; --text-inverse: #fafaf9;
+            --accent: #2563eb; --accent-hover: #1d4ed8; --accent-subtle: #dbeafe;
+            --border: #e7e5e4; --success: #16a34a; --warning: #f59e0b; --error: #dc2626;
+            --color-deepseek: #6366f1; --color-claude: #d97706; --color-qwen: #10b981;
+            --font-sans: 'IBM Plex Sans', -apple-system, sans-serif;
+            --font-mono: 'IBM Plex Mono', monospace;
+            --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px;
+            --transition-fast: 150ms ease; --shadow-sm: 0 1px 2px rgba(0,0,0,0.04); --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; font-family: var(--font-sans); font-size: 14px; line-height: 1.5; color: var(--text-primary); background: var(--bg-primary); -webkit-font-smoothing: antialiased; }
+        
+        .app { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) 320px; grid-template-rows: 48px 1fr; grid-template-areas: "header header header" "chat terminal artefacts"; height: 100vh; overflow: hidden; }
+.chat-panel, .terminal-panel, .artefacts-panel, .chat-messages, .terminal-content { min-width: 0; }
+        
+        /* HEADER */
+        .header { grid-area: header; display: flex; align-items: center; justify-content: space-between; padding: 0 var(--space-md); background: var(--bg-primary); border-bottom: 1px solid var(--border); }
+        .logo { display: flex; align-items: center; gap: var(--space-sm); font-weight: 600; font-size: 15px; }
+        .logo-icon { width: 24px; height: 24px; background: linear-gradient(135deg, var(--accent), #7c3aed); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; }
+        .header-center { display: flex; align-items: center; gap: var(--space-md); }
+        
+        .model-selector { display: flex; gap: 2px; background: var(--bg-secondary); padding: 3px; border-radius: 8px; }
+        .model-option { padding: 5px 10px; border: none; background: transparent; border-radius: 5px; font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all var(--transition-fast); }
+        .model-option:hover { background: var(--bg-tertiary); }
+        .model-option.active { background: white; box-shadow: var(--shadow-sm); }
+        
+        /* PROJECT SELECTOR */
+        .project-selector { position: relative; margin-left: 16px; }
+        .project-btn { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; font-family: inherit; }
+        .project-btn:hover { background: var(--bg-tertiary); }
+        .project-icon { font-size: 14px; }
+        .project-arrow { font-size: 10px; color: var(--text-tertiary); margin-left: 4px; }
+        .project-dropdown { position: absolute; top: 100%; left: 0; margin-top: 4px; background: white; border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-md); min-width: 200px; z-index: 100; display: none; overflow: hidden; }
+        .project-dropdown.open { display: block; }
+        .project-option { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; font-size: 13px; transition: background var(--transition-fast); }
+        .project-option:hover { background: var(--bg-secondary); }
+        .project-option.active { background: var(--accent-subtle); color: var(--accent); }
+        .project-option .status-indicator { width: 8px; height: 8px; border-radius: 50%; margin-left: auto; }
+        .project-option .status-indicator.running { background: var(--success); }
+        .project-option .status-indicator.stopped { background: var(--text-tertiary); }
+        .model-option .dot { width: 6px; height: 6px; border-radius: 50%; }
+        .model-option[data-model="deepseek"] .dot { background: var(--color-deepseek); }
+        .model-option[data-model="claude"] .dot { background: var(--color-claude); }
+        .model-option[data-model="qwen"] .dot { background: var(--color-qwen); }
+        
+        .feature-toggles { display: flex; gap: var(--space-sm); }
+        .feature-toggle { display: flex; align-items: center; gap: 4px; padding: 5px 8px; background: var(--bg-secondary); border: 1px solid transparent; border-radius: 5px; font-size: 11px; cursor: pointer; color: var(--text-secondary); transition: all var(--transition-fast); }
+        .feature-toggle:hover { background: var(--bg-tertiary); }
+        .feature-toggle.active { background: var(--accent-subtle); border-color: var(--accent); color: var(--accent); }
+        
+        .header-status { display: flex; align-items: center; gap: var(--space-md); }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+        .status-dot.disconnected { background: var(--error); }
+        
+        /* CHAT PANEL */
+        .chat-panel { grid-area: chat; display: flex; flex-direction: column; background: var(--bg-primary); border-right: 1px solid var(--border); min-height: 0; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-md); min-height: 0; }
+        .message { max-width: 90%; padding: var(--space-md); border-radius: 12px; animation: fadeIn 0.2s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .message.user { align-self: flex-end; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
+        .message.assistant { align-self: flex-start; background: var(--bg-secondary); border-bottom-left-radius: 4px; }
+        .message .model-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-bottom: 6px; background: rgba(0,0,0,0.05); }
+        .message-content { white-space: pre-wrap; word-break: break-word; }
+        .message-content code { font-family: var(--font-mono); font-size: 12px; background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; }
+        .message.user .message-content code { background: rgba(255,255,255,0.2); }
+        
+        /* CODE BLOCKS WITH EXECUTE BUTTON */
+        .code-block-wrapper { margin: var(--space-sm) 0; border-radius: 8px; overflow: hidden; background: var(--bg-terminal); }
+        .code-block-wrapper pre { background: var(--bg-terminal); color: var(--text-inverse); padding: var(--space-md); overflow-x: auto; margin: 0; }
+        .code-block-wrapper pre code { background: transparent; padding: 0; color: inherit; display: block; }
+        .code-block-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: #292524; font-size: 11px; color: var(--text-tertiary); }
+        .code-block-lang { font-family: var(--font-mono); }
+        .code-block-actions { display: flex; gap: 4px; }
+        .code-exec-btn { padding: 2px 8px; background: var(--success); color: white; border: none; border-radius: 4px; font-size: 10px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+        .code-exec-btn:hover { background: #15803d; }
+        .code-exec-btn.running { background: var(--warning); }
+        .code-copy-btn { padding: 2px 8px; background: #3f3f46; color: white; border: none; border-radius: 4px; font-size: 10px; cursor: pointer; }
+        .code-copy-btn:hover { background: #52525b; }
+        
+        .message-actions { display: flex; gap: var(--space-sm); margin-top: var(--space-sm); opacity: 0; transition: opacity var(--transition-fast); }
+        .message:hover .message-actions { opacity: 1; }
+        .message-action { font-size: 11px; color: var(--text-tertiary); background: none; border: none; cursor: pointer; padding: 2px 5px; border-radius: 3px; }
+        .message-action:hover { background: var(--bg-tertiary); color: var(--text-secondary); }
+        
+        /* CHAT INPUT */
+        .chat-input-container { padding: var(--space-md); border-top: 1px solid var(--border); background: var(--bg-primary); }
+        .context-bar { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-bottom: var(--space-sm); }
+        .context-item { display: flex; align-items: center; gap: 3px; padding: 3px 6px; background: var(--bg-secondary); border-radius: 4px; font-size: 10px; color: var(--text-secondary); }
+        .context-item.active { background: var(--accent-subtle); color: var(--accent); }
+        .context-item .remove { cursor: pointer; margin-left: 3px; opacity: 0.5; }
+        .context-item .remove:hover { opacity: 1; }
+        .pending-attachments { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+        .pending-attachment { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: var(--accent-subtle); border-radius: 6px; font-size: 11px; color: var(--accent); }
+        .pending-attachment-remove { background: none; border: none; cursor: pointer; color: var(--accent); font-size: 14px; padding: 0; margin-left: 4px; }
+        .chat-input-wrapper { display: flex; gap: var(--space-sm); align-items: flex-end; }
+        .chat-upload { width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-primary); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .chat-upload:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-subtle); }
+        .chat-upload input { display: none; }
+        .chat-input { flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 14px; resize: none; min-height: 36px; max-height: 150px; line-height: 1.4; }
+        .chat-input:focus { outline: none; border-color: var(--accent); }
+        .chat-send { width: 36px; height: 36px; border: none; border-radius: 8px; background: var(--accent); color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .chat-send:hover { background: var(--accent-hover); }
+        .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* TERMINAL PANEL */
+        .terminal-panel { grid-area: terminal; display: flex; flex-direction: column; background: var(--bg-terminal); border-right: 1px solid var(--border); min-height: 0; }
+        .terminal-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm) var(--space-md); background: #292524; border-bottom: 1px solid #3f3f46; }
+        .terminal-title { font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary); display: flex; align-items: center; gap: var(--space-sm); }
+        
+        /* TERMINAL MODE TOGGLE */
+        .terminal-mode-toggle { display: flex; gap: 2px; background: #1c1917; padding: 2px; border-radius: 4px; }
+        .terminal-mode-btn { padding: 3px 8px; border: none; background: transparent; border-radius: 3px; font-size: 10px; font-weight: 500; cursor: pointer; color: var(--text-tertiary); transition: all var(--transition-fast); }
+        .terminal-mode-btn:hover { color: var(--text-inverse); }
+        .terminal-mode-btn.active { background: var(--success); color: white; }
+        .terminal-mode-btn.active.auto { background: var(--warning); }
+        
+        .terminal-content { flex: 1; overflow-y: auto; padding: var(--space-md); font-family: var(--font-mono); font-size: 13px; line-height: 1.5; color: #e7e5e4; }
+        .terminal-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-tertiary); text-align: center; }
+        .terminal-placeholder-icon { font-size: 32px; margin-bottom: var(--space-md); opacity: 0.5; }
+        .terminal-output { white-space: pre-wrap; word-break: break-all; }
+        .terminal-output .cmd { color: #22c55e; }
+        .terminal-output .result { color: #e7e5e4; }
+        .terminal-output .error { color: #ef4444; }
+        .terminal-output .info { color: #60a5fa; }
+        .terminal-output .success { color: #22c55e; }
+        .terminal-output .blocked { color: #f59e0b; }
+        .terminal-entry { margin-bottom: var(--space-md); padding-bottom: var(--space-md); border-bottom: 1px solid #3f3f46; }
+        .terminal-entry:last-child { border-bottom: none; }
+        .terminal-input-line { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm); background: #292524; border-top: 1px solid #3f3f46; }
+        .terminal-input-line .prompt { color: #22c55e; }
+        .terminal-input { flex: 1; background: transparent; border: none; font-family: var(--font-mono); font-size: 13px; color: #fafaf9; outline: none; }
+        
+        /* ARTEFACTS PANEL */
+        .artefacts-panel { grid-area: artefacts; display: flex; flex-direction: column; background: var(--bg-secondary); min-height: 0; }
+        .artefacts-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-md); border-bottom: 1px solid var(--border); }
+        .artefacts-title { font-weight: 600; font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+        .artefacts-upload-btn { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        .artefacts-count { font-size: 11px; color: var(--text-tertiary); background: var(--bg-tertiary); padding: 2px 6px; border-radius: 10px; }
+        .artefacts-filters { display: flex; gap: 2px; padding: var(--space-sm) var(--space-md); background: var(--bg-tertiary); }
+        .artefacts-filter { flex: 1; padding: 5px; border: none; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; border-radius: 4px; }
+        .artefacts-filter:hover { background: var(--bg-secondary); }
+        .artefacts-filter.active { background: var(--bg-primary); color: var(--accent); box-shadow: var(--shadow-sm); }
+        .artefacts-list { flex: 1; overflow-y: auto; padding: var(--space-sm); }
+        .artefact-item { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm); border-radius: 6px; cursor: pointer; transition: background var(--transition-fast); }
+        .artefact-item:hover { background: var(--bg-tertiary); }
+        .artefact-item.in-context { background: var(--accent-subtle); }
+        .artefact-icon { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: var(--bg-primary); border-radius: 4px; font-size: 12px; }
+        .artefact-info { flex: 1; min-width: 0; }
+        .artefact-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .artefact-meta { font-size: 10px; color: var(--text-tertiary); }
+        .artefact-actions { display: flex; gap: 2px; opacity: 0; transition: opacity var(--transition-fast); }
+        .artefact-item:hover .artefact-actions { opacity: 1; }
+        .artefact-action { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; color: var(--text-secondary); }
+        .artefact-action:hover { background: var(--bg-primary); color: var(--text-primary); }
+        .artefact-action.active { color: var(--accent); }
+        .artefact-action.delete:hover { background: #fecaca; color: var(--error); }
+        .artefacts-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 150px; color: var(--text-tertiary); }
+        .artefacts-empty-icon { font-size: 28px; margin-bottom: var(--space-sm); opacity: 0.5; }
+        
+        /* MODALS & OVERLAYS */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.2s; }
+        .modal-overlay.visible { opacity: 1; visibility: visible; }
+        .modal { background: var(--bg-primary); border-radius: 12px; box-shadow: var(--shadow-md); max-width: 500px; width: 90%; max-height: 80vh; display: flex; flex-direction: column; }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-md); border-bottom: 1px solid var(--border); }
+        .modal-title { font-weight: 600; }
+        .modal-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 4px; cursor: pointer; font-size: 18px; color: var(--text-secondary); }
+        .modal-close:hover { background: var(--bg-secondary); }
+        .modal-content { padding: var(--space-md); overflow-y: auto; }
+        .preview-content { font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; background: var(--bg-secondary); padding: var(--space-md); border-radius: 6px; max-height: 400px; overflow-y: auto; }
+        
+        .drop-overlay { position: fixed; inset: 0; background: rgba(37,99,235,0.1); border: 3px dashed var(--accent); display: flex; align-items: center; justify-content: center; z-index: 999; opacity: 0; visibility: hidden; transition: all var(--transition-fast); }
+        .drop-overlay.visible { opacity: 1; visibility: visible; }
+        .drop-overlay-content { background: var(--bg-primary); padding: var(--space-xl); border-radius: 16px; text-align: center; }
+        .drop-overlay-icon { font-size: 48px; margin-bottom: var(--space-md); }
+        .drop-overlay-text { font-size: 18px; font-weight: 500; color: var(--accent); }
+        
+        .upload-progress { position: fixed; bottom: var(--space-lg); right: var(--space-lg); background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; padding: var(--space-md); box-shadow: var(--shadow-md); min-width: 200px; z-index: 100; display: none; }
+        .upload-progress.visible { display: block; }
+        .upload-progress-bar { height: 4px; background: var(--bg-tertiary); border-radius: 2px; margin-top: var(--space-sm); overflow: hidden; }
+        .upload-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.2s; }
+        
+        .toast-container { position: fixed; bottom: var(--space-lg); left: 50%; transform: translateX(-50%); z-index: 1001; display: flex; flex-direction: column; gap: var(--space-sm); }
+        .toast { padding: 10px 16px; background: var(--bg-terminal); color: var(--text-inverse); border-radius: 8px; font-size: 13px; box-shadow: var(--shadow-md); animation: slideUp 0.3s ease; }
+        .toast.success { background: var(--success); }
+        .toast.error { background: var(--error); }
+        .toast.warning { background: var(--warning); }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .loading-dots { display: flex; gap: 4px; }
+        .loading-dots span { width: 6px; height: 6px; background: var(--text-tertiary); border-radius: 50%; animation: bounce 1.4s infinite ease-in-out; }
+        .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        
+        .settings-section { margin-bottom: var(--space-lg); }
+        .settings-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: var(--space-sm); }
+        .settings-row { display: flex; justify-content: space-between; align-items: center; padding: var(--space-sm) 0; border-bottom: 1px solid var(--border); }
+        .settings-label small { display: block; font-size: 11px; color: var(--text-tertiary); }
+        
+        @media (max-width: 1024px) { .app { grid-template-columns: 1fr 1fr; grid-template-areas: "header header" "chat terminal"; } .artefacts-panel { display: none; } }
+        @media (max-width: 768px) { .app { grid-template-columns: 1fr; grid-template-areas: "header" "chat"; } .terminal-panel { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="logo"><div class="logo-icon">◈</div><span>ACP</span></div>
+            <div class="project-selector" id="projectSelector">
+                <button class="project-btn" id="projectBtn"><span class="project-icon">🛣️</span><span class="project-name">Projets</span><span class="project-arrow">▼</span></button>
+                <div class="project-dropdown" id="projectDropdown"></div>
+            </div>
+            <div class="header-center">
+                <div class="model-selector" id="modelSelector">
+                    <button class="model-option chat-tab active" data-model="chat"><span class="dot"></span>Chat</button>
+                    <button class="model-option" data-model="deepseek"><span class="dot"></span>DeepSeek</button>
+                    <button class="model-option" data-model="claude"><span class="dot"></span>Claude</button>
+                    <button class="model-option" data-model="qwen"><span class="dot"></span>Qwen3</button>
+                </div>
+                <div class="feature-toggles">
+                    <button class="feature-toggle" id="toggleWeb">🌐 Web</button>
+                    <button class="feature-toggle" id="toggleOCR">📷 OCR</button>
+                    <button class="feature-toggle active" id="toggleTerminal">⌨️ Terminal</button>
+                </div>
+            </div>
+            <div class="header-status">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText" style="font-size:12px;color:var(--text-tertiary)">Connecting...</span>
+            </div>
+        </header>
+
+        <div class="chat-panel">
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input-container">
+                <div class="context-bar" id="contextBar"></div>
+                <div class="pending-attachments" id="pendingAttachments"></div>
+                <div class="chat-input-wrapper">
+                    <label class="chat-upload"><input type="file" id="fileInput" multiple><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></label>
+                    <textarea class="chat-input" id="chatInput" placeholder="Message chat… (@acp pour ACP)" rows="1"></textarea>
+                    <button class="chat-send" id="chatSend" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="terminal-panel">
+            <div class="terminal-header">
+                <span class="terminal-title">Terminal</span>
+                <div class="terminal-mode-toggle">
+                    <button class="terminal-mode-btn active" data-mode="manual" id="modeManual">MANUAL</button>
+                    <button class="terminal-mode-btn" data-mode="auto" id="modeAuto">AUTO</button>
+                </div>
+                <div id="autoControls" style="display:none; align-items:center; gap:4px; margin-left:8px;">
+                    <button id="autoPauseBtn" onclick="toggleAutoPause()" title="Pause/Resume" style="padding:2px 8px; font-size:14px; background:#292524; border:1px solid #44403c; border-radius:4px; cursor:pointer;">⏸</button>
+                    <button id="autoInfiniteBtn" onclick="toggleAutoInfinite()" title="Unlimited iterations" style="padding:2px 8px; font-size:14px; background:#292524; border:1px solid #44403c; border-radius:4px; cursor:pointer;">∞</button>
+                    <span id="autoIterCount" style="font-size:11px; color:#888; margin-left:4px;">0</span>
+                </div>
+            </div>
+            <div class="terminal-content" id="terminalContent">
+                <div class="terminal-placeholder" id="terminalPlaceholder">
+                    <div class="terminal-placeholder-icon">⌨️</div>
+                    <div>Terminal Bridge</div>
+                    <div style="font-size:11px;margin-top:4px;color:var(--text-tertiary)">MANUAL: Cliquer [▶ Exécuter] sur les blocs de code</div>
+                    <div style="font-size:11px;color:var(--text-tertiary)">AUTO: Le LLM exécute automatiquement</div>
+                </div>
+                <div class="terminal-output" id="terminalOutput" style="display:none"></div>
+            </div>
+            <div class="terminal-input-line" id="terminalInputLine">
+                <span class="prompt">$</span>
+                <input type="text" class="terminal-input" id="terminalInput" placeholder="Commande manuelle...">
+            </div>
+        </div>
+
+        <div class="artefacts-panel">
+            <div class="artefacts-header">
+                <span class="artefacts-title">Artefacts</span>
+                <div style="display:flex;align-items:center;gap:var(--space-sm)">
+                    <label class="artefacts-upload-btn"><input type="file" id="artefactUpload" multiple style="display:none">+</label>
+                    <span class="artefacts-count" id="artefactsCount">0</span>
+                </div>
+            </div>
+            <div class="artefacts-filters" id="artefactsFilters">
+                <button class="artefacts-filter active" data-filter="all">All</button>
+                <button class="artefacts-filter" data-filter="chat">AI</button>
+                <button class="artefacts-filter" data-filter="upload">User</button>
+            </div>
+            <div class="artefacts-list" id="artefactsList"></div>
+        </div>
+    </div>
+
+    <div class="drop-overlay" id="dropOverlay"><div class="drop-overlay-content"><div class="drop-overlay-icon">📎</div><div class="drop-overlay-text">Drop files</div></div></div>
+    <div class="upload-progress" id="uploadProgress"><div id="uploadFileName">Uploading...</div><div class="upload-progress-bar"><div class="upload-progress-fill" id="uploadFill"></div></div></div>
+    <div class="modal-overlay" id="previewModal"><div class="modal" style="max-width:800px"><div class="modal-header"><span class="modal-title" id="previewTitle">Preview</span><button class="modal-close" id="previewClose">×</button></div><div class="modal-content"><pre class="preview-content" id="previewContent"></pre></div></div></div>
+    <div class="modal-overlay" id="settingsModal"><div class="modal"><div class="modal-header"><span class="modal-title">⚙️ Settings</span><button class="modal-close" id="settingsClose">×</button></div><div class="modal-content"><div class="settings-section"><div class="settings-section-title">LLM Configuration</div><div class="settings-row"><div class="settings-label"><span>Claude API</span><small>✅ Configured server-side</small></div><span style="color:var(--success)">Active</span></div><div class="settings-row"><div class="settings-label"><span>DeepSeek</span><small>Local vLLM (port 8000)</small></div><span style="color:var(--success)">Active</span></div><div class="settings-row"><div class="settings-label"><span>Terminal Bridge</span><small>Sandboxed execution</small></div><span style="color:var(--success)">Active</span></div></div></div></div></div>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+const CONFIG = {
+    apiBase: window.location.origin + '/api',
+    apiKey: 'HYPER_KQ57QFnPXwRhjaZCL2Qs2fzvTa9gmHBe',
+    projects: {
+    sentinel: { name: 'Lane A', icon: '🛣️', color: '#ef4444' },
+    hyperfocus: { name: 'Hyperfocus', icon: '⚡', color: '#f59e0b' }
+},
+models: {
+        deepseek: { name: 'DeepSeek', endpoint: '/chat/completions', model: 'deepseek', color: '#6366f1' },
+        claude: { name: 'Claude', endpoint: '/chat/completions', model: 'claude', color: '#d97706' },
+        qwen: { name: 'Qwen3', endpoint: '/chat/completions', model: 'qwen', color: '#10b981' }
+    }
+};
+
+const state = {
+    sessionId: null, isStreaming: false, autoPaused: false, autoInfinite: false, autoRecursionCount: 0, artefacts: [], pendingFiles: [],
+    currentModel: 'deepseek', currentProject: 'sentinel', workingDir: '/data/workspaces/acp-lab/worktree', terminalMode: 'manual',
+    lastAssistantCodeMessage: null, // Store last LLM message with code blocks for confirmation flow // 'manual' | 'auto'
+    features: { web: false, ocr: false, terminal: true }, contextArtefacts: []
+};
+
+const $ = id => document.getElementById(id);
+const esc = t => { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; };
+const fileIcon = ext => ({ md: '📝', txt: '📄', py: '🐍', js: '📜', json: '📋', pdf: '📕', png: '🖼', jpg: '🖼', csv: '📊', html: '🌐', sh: '⚙️' }[ext] || '📄');
+const formatSize = b => b < 1024 ? b + 'B' : b < 1048576 ? (b/1024).toFixed(1) + 'KB' : (b/1048576).toFixed(1) + 'MB';
+const formatDate = d => { const diff = Date.now() - new Date(d); return diff < 60000 ? 'now' : diff < 3600000 ? Math.floor(diff/60000) + 'm' : diff < 86400000 ? Math.floor(diff/3600000) + 'h' : new Date(d).toLocaleDateString(); };
+
+const toast = {
+    show(msg, type = 'info') {
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.textContent = msg;
+        $('toastContainer').appendChild(el);
+        setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3000);
+    }
+};
+
+async function importSandboxFile(filepath) {
+    const formData = new FormData();
+    formData.append('filepath', filepath);
+    formData.append('project_key', state.currentProject || 'cresus');
+    const r = await fetch(CONFIG.apiBase + '/artefacts/from-sandbox', {
+        method: 'POST',
+        headers: { 'X-API-Key': CONFIG.apiKey },
+        body: formData
+    });
+    if (r.ok) {
+        const data = await r.json();
+        toast.show('📁 ' + data.filename + ' imported', 'success');
+        loadArtefacts();
+        return data;
+    }
+    throw new Error('Import failed');
+}
+
+const api = {
+    headers: () => ({ 'Content-Type': 'application/json', 'X-API-Key': CONFIG.apiKey }),
+    async fetch(endpoint, opts = {}) {
+        const r = await fetch(CONFIG.apiBase + endpoint, { ...opts, headers: { ...this.headers(), ...opts.headers } });
+        if (!r.ok) throw new Error(`API ${r.status}`);
+        return r.json();
+    },
+    checkHealth: async () => { try { const r = await fetch('/health'); const d = await r.json(); return d.status === 'healthy'; } catch { return false; } },
+    sendMessage: (content) => {
+        const termCtx = getTerminalContext();
+        const modeInstructions = termCtx.mode === 'auto' 
+            ? `[MODE AUTO] Tu as accès au terminal sandbox ACP.\n\n📁 CRÉER DES FICHIERS CODE (.py, .sh, .js, etc.):\nUtilise TOUJOURS un heredoc bash en UN SEUL bloc:\n\`\`\`bash\ncat > fichier.py << 'EOF'\n# contenu du fichier\nprint("hello")\nEOF\n\`\`\`\n\n📄 CRÉER DES DOCUMENTS (.md, .docx, .pdf):\n[CREATE_DOC:format:filename]contenu[/CREATE_DOC]\n\n⚠️ IMPORTANT:\n- UN SEUL bloc de code à la fois\n- Attends les résultats avant de continuer\n- N'utilise PAS plusieurs echo >> pour créer un fichier`
+            : `[MODE MANUAL] Tu as accès au terminal sandbox ACP.\nL'utilisateur est TDAH - UNE SEULE action à la fois.\n\n📁 FICHIERS CODE: cat > file.py << 'EOF'\n...\nEOF\n📄 DOCUMENTS: [CREATE_DOC:md:file.md]contenu[/CREATE_DOC]`;
+        const enrichedContent = '[TERMINAL CONTEXT]\nProject: ' + termCtx.project + '\nWorkDir: ' + termCtx.workingDir + '\nMode: ' + termCtx.mode.toUpperCase() + '\n' + modeInstructions + '\nRecent commands:\n' + termCtx.history + '\n\n[USER REQUEST]\n' + content;
+        return api.fetch(CONFIG.models[state.currentModel].endpoint, {
+            method: 'POST',
+            body: JSON.stringify({ messages: [{ role: 'user', content: enrichedContent }], session_id: state.sessionId, model: state.currentModel, artefact_ids: state.contextArtefacts.map(a => a.id) })
+        });
+    },
+    getArtefacts: (src) => api.fetch('/artefacts' + (src ? `?source=${src}` : '')),
+    deleteArtefact: (id) => api.fetch(`/artefacts/${id}`, { method: 'DELETE' }),
+    createDocument: (content, filename, format, title) => api.fetch('/documents/create', {
+        method: 'POST',
+        body: JSON.stringify({ content, filename, format: format || 'md', title })
+    }),
+    updateDocument: (artefactId, newContent) => api.fetch('/documents/update', {
+        method: 'POST',
+        body: JSON.stringify({ artefact_id: artefactId, new_content: newContent })
+    }),
+    createDocument: (content, filename, format, title) => api.fetch('/documents/create', {
+        method: 'POST',
+        body: JSON.stringify({ content, filename, format: format || 'md', title })
+    }),
+    updateDocument: (artefactId, newContent) => api.fetch('/documents/update', {
+        method: 'POST',
+        body: JSON.stringify({ artefact_id: artefactId, new_content: newContent })
+    }),
+    uploadArtefact: (file, onProgress) => new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest(), fd = new FormData();
+        fd.append('file', file);
+        fd.append('project_key', state.currentProject || 'cresus');
+        xhr.upload.onprogress = e => e.lengthComputable && onProgress?.(Math.round(e.loaded / e.total * 100));
+        xhr.onload = () => xhr.status < 300 ? resolve(JSON.parse(xhr.responseText)) : reject(new Error(xhr.status));
+        xhr.onerror = () => reject(new Error('Upload failed'));
+        xhr.open('POST', CONFIG.apiBase + '/artefacts/upload');
+        xhr.setRequestHeader('X-API-Key', CONFIG.apiKey);
+        xhr.send(fd);
+    }),
+    previewArtefact: async (id) => { const r = await fetch(CONFIG.apiBase + `/artefacts/${id}/preview`, { headers: api.headers() }); return r.text(); },
+    // Terminal Bridge
+    executeCommand: (cmd) => api.fetch('/terminal-bridge/execute', { method: 'POST', body: JSON.stringify({ command: cmd }) }),
+    executePython: (code) => api.fetch('/terminal-bridge/execute-python', { method: 'POST', body: JSON.stringify({ code }) }),
+    // Sandbox API
+    getSandboxProjects: () => api.fetch('/sandbox/projects'),
+    sandboxExecute: (project, cmd, workingDir) => api.fetch('/terminal-bridge/execute', {
+        method: 'POST',
+        body: JSON.stringify({ command: cmd, working_dir: workingDir || '/data/workspaces/acp-lab/worktree' })
+    }),
+    sandboxStart: (project) => api.fetch('/sandbox/projects/' + project + '/start', { method: 'POST' }),
+    sandboxStop: (project) => api.fetch('/sandbox/projects/' + project + '/stop', { method: 'POST' })
+};
+
+// Auto-execute code blocks from LLM response
+async function autoExecuteCodeBlocks(text) {
+    if (state.terminalMode !== 'auto') return;
+    
+    // Check if paused
+    if (state.autoPaused) { 
+        toast.show('Auto mode paused - click ▶ to resume', 'info');
+        state.pendingAutoText = text; // Store for resume
+        return; 
+    }
+    
+    // Check recursion limit (unless infinite mode)
+    state.autoRecursionCount++;
+    if (!state.autoInfinite && state.autoRecursionCount > 15) {
+        state.autoRecursionCount = 0;
+        toast.show('Auto mode: 15 iterations reached. Click ∞ for unlimited.', 'warning');
+        return;
+    }
+    
+    // Update iteration counter in UI
+    if ($('autoIterCount')) $('autoIterCount').textContent = state.autoRecursionCount;
+    
+    // Extract code blocks (```bash or ```sh or ``` with shell commands)
+    const codeBlockRegex = /```(?:bash|sh|shell)?\n([\s\S]*?)```/g;
+    const blocks = [];
+    let match;
+    
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+        const code = match[1].trim();
+        // Only execute if it looks like shell commands (not python/js/etc)
+        // Check first line to determine if it's a pure Python/JS file
+        const firstLine = code.split('\n')[0].trim();
+        const isPureScript = firstLine.startsWith('def ') || 
+                             firstLine.startsWith('class ') ||
+                             firstLine.startsWith('import ') ||
+                             firstLine.startsWith('from ') ||
+                             firstLine.startsWith('function ') ||
+                             firstLine.startsWith('const ') ||
+                             firstLine.startsWith('let ') ||
+                             firstLine.startsWith('var ');
+        if (code && !isPureScript) {
+            blocks.push(code);
+        }
+    }
+    
+    if (blocks.length === 0) return;
+    
+    toast.show('Auto-executing ' + blocks.length + ' code block(s)...', 'info');
+    
+    // Collect all results
+    const results = [];
+    
+    for (const block of blocks) {
+        // Execute entire block as one command (supports heredocs, multi-line)
+        const result = await terminal.execute(block);
+        await new Promise(r => setTimeout(r, 500));
+        if (result) {
+            results.push({
+                cmd: block.split('\n')[0] + (block.includes('\n') ? ' ...' : ''),
+                success: result.success,
+                output: (result.output || '').slice(0, 2000),
+                stderr: (result.stderr || '').slice(0, 200)
+            });
+            
+            // Auto-import created files to artefacts
+            if (result.success) {
+                const fileMatch = block.match(/cat\s*>\s*([^\s<]+)/);
+                if (fileMatch) {
+                    const filepath = fileMatch[1];
+                    // Only import code files
+                    if (/\.(py|js|ts|sh|json|yaml|yml|sql|html|css)$/i.test(filepath)) {
+                        try {
+                            await importSandboxFile(filepath);
+                        } catch (e) { console.log('Auto-import skipped:', e); }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Anti-loop: detect repeated errors
+    if (results.length > 0) {
+        const allFailed = results.every(r => !r.success);
+        const currentError = results.map(r => r.stderr || r.output || '').join('|').slice(0, 200);
+        
+        if (!state._lastAutoError) state._lastAutoError = '';
+        if (!state._autoErrorCount) state._autoErrorCount = 0;
+        
+        if (allFailed && currentError === state._lastAutoError) {
+            state._autoErrorCount++;
+            if (state._autoErrorCount >= 3) {
+                toast.show('Auto mode stopped: same error 3x in a row', 'error');
+                state._autoErrorCount = 0;
+                state._lastAutoError = '';
+                return;
+            }
+        } else {
+            state._autoErrorCount = allFailed ? 1 : 0;
+            state._lastAutoError = allFailed ? currentError : '';
+        }
+    }
+    
+    // Auto-send results back to LLM
+    if (results.length > 0) {
+        await new Promise(r => setTimeout(r, 1000));
+        
+        const summary = results.map(r => 
+            '$ ' + r.cmd + '\n' + (r.success ? '✅' : '❌') + ' ' + (r.output || r.stderr || '(no output)')
+        ).join('\n---\n');
+        
+        ui.addMessage('user', '[AUTO-EXEC RESULTS]\n' + summary);
+        ui.addLoading();
+        
+        try {
+            const response = await api.sendMessage('[MODE AUTO] Voici les résultats des commandes exécutées. Analyse-les et continue :\n\n' + summary);
+            state.sessionId = response.session_id;
+            ui.removeLoading();
+            ui.addMessage('assistant', response.message.content, { model: state.currentModel });
+            
+            // Recursive: check if new response has more code blocks
+            await autoExecuteCodeBlocks(response.message.content);
+        } catch (e) {
+            ui.removeLoading();
+            ui.addMessage('assistant', 'Error analyzing results: ' + e.message, { model: state.currentModel });
+        }
+    }
+}
+
+// Parse and create documents from LLM response
+async function parseAndCreateDocuments(text) {
+    const docRegex = /\[CREATE_DOC:(\w+):([^\]]+)\]([\s\S]*?)\[\/CREATE_DOC\]/g;
+    let match;
+    const created = [];
+    
+    while ((match = docRegex.exec(text)) !== null) {
+        const format = match[1];
+        const filename = match[2];
+        const docContent = match[3].trim();
+        
+        try {
+            const result = await api.createDocument(docContent, filename, format);
+            if (result.success) {
+                created.push(result.filename);
+                toast.show('Document créé: ' + result.filename, 'success');
+            }
+        } catch (e) {
+            toast.show('Erreur création doc: ' + e.message, 'error');
+        }
+    }
+    
+    if (created.length > 0) {
+        loadArtefacts();
+    }
+    
+    return created;
+}
+
+// Terminal context for LLM
+
+function getTerminalContext() {
+    const entries = document.querySelectorAll('#terminalOutput .terminal-entry');
+    const last5 = Array.from(entries).slice(-5);
+    const history = last5.map(e => {
+        const cmd = e.querySelector('.cmd')?.textContent || '';
+        const result = e.querySelector('.result')?.textContent || '';
+        return cmd + (result ? '\n' + result.slice(0, 500) : '');
+    }).join('\n---\n');
+    return {
+        project: CONFIG.projects[state.currentProject]?.name || state.currentProject,
+        workingDir: state.workingDir,
+        mode: state.terminalMode,
+        history: history || '(no recent commands)'
+    };
+}
+
+// ============================================================================
+// TERMINAL BRIDGE
+// ============================================================================
+const terminal = {
+    show() {
+        $('terminalPlaceholder').style.display = 'none';
+        $('terminalOutput').style.display = 'block';
+    },
+    clear() {
+        $('terminalOutput').innerHTML = '';
+    },
+    append(html) {
+        this.show();
+        const entry = document.createElement('div');
+        entry.className = 'terminal-entry';
+        entry.innerHTML = html;
+        $('terminalOutput').appendChild(entry);
+        $('terminalContent').scrollTop = $('terminalContent').scrollHeight;
+    },
+    async execute(cmd, isCode = false) {
+        const startTime = Date.now();
+        const projectKey = state.currentProject || 'cresus';
+        const proj = CONFIG.projects[projectKey] || { icon: '📁', name: projectKey };
+        const projectLabel = proj.name || projectKey;
+        const cmdPreview = cmd.length > 80 ? cmd.slice(0, 80) + '...' : cmd;
+        
+        this.append('<div class="cmd">' + proj.icon + ' ' + projectLabel + ' $ ' + esc(cmdPreview) + '</div><div class="info">⏳ Executing in terminal bridge...</div>');
+        
+        try {
+            const result = await api.sandboxExecute(projectKey, cmd, state.workingDir);
+            const lastEntry = $('terminalOutput').lastElementChild;
+            const elapsed = result.execution_time ? result.execution_time.toFixed(2) : ((Date.now() - startTime) / 1000).toFixed(2);
+            
+            if (result.success) {
+                // Update workingDir if cd command
+                if (cmd.trim().startsWith('cd ')) {
+                    const cdPath = cmd.trim().slice(3).trim();
+                    if (cdPath.startsWith('/')) {
+                        state.workingDir = cdPath;
+                    } else if (cdPath === '..') {
+                        state.workingDir = state.workingDir.split('/').slice(0, -1).join('/') || '/';
+                    } else if (cdPath === '~' || cdPath === '') {
+                        state.workingDir = '/data/workspaces/acp-lab/worktree';
+                    } else {
+                        state.workingDir = state.workingDir + '/' + cdPath;
+                    }
+                    state.workingDir = state.workingDir.replace(/\/\/+/g, '/');
+                }
+                lastEntry.innerHTML = '<div class="cmd">' + proj.icon + ' ' + projectLabel + ' $ ' + esc(cmdPreview) + '</div>' +
+                    '<div class="success">✅ Exit: ' + result.return_code + ' (' + elapsed + 's)</div>' +
+                    (result.output ? '<div class="result">' + esc(result.output) + '</div>' : '') +
+                    (result.stderr ? '<div class="error">' + esc(result.stderr) + '</div>' : '');
+            } else {
+                lastEntry.innerHTML = '<div class="cmd">' + proj.icon + ' ' + projectLabel + ' $ ' + esc(cmdPreview) + '</div>' +
+                    '<div class="error">❌ Exit: ' + result.return_code + '</div>' +
+                    (result.stderr ? '<div class="error">' + esc(result.stderr) + '</div>' : '') +
+                    (result.output ? '<div class="result">' + esc(result.output) + '</div>' : '');
+            }
+            return result;
+        } catch (e) {
+            const lastEntry = $('terminalOutput').lastElementChild;
+            lastEntry.innerHTML = '<div class="cmd">' + proj.icon + ' ' + projectLabel + ' $ ' + esc(cmdPreview) + '</div>' +
+                '<div class="error">❌ Error: ' + esc(e.message) + '</div>';
+            return { success: false, error: e.message };
+        }
+    }
+};
+
+// ============================================================================
+// UI
+// ============================================================================
+const ui = {
+    setStatus(ok) { $('statusDot').classList.toggle('disconnected', !ok); $('statusText').textContent = ok ? 'Connected' : 'Offline'; },
+    
+    setModel(m) { 
+        state.currentModel = m; 
+        document.querySelectorAll('.model-option').forEach(b => b.classList.toggle('active', b.dataset.model === m)); 
+        this.updateContext(); 
+    },
+    
+    setTerminalMode(mode) {
+        state.terminalMode = mode; if (typeof updateAutoControlsVisibility === 'function') updateAutoControlsVisibility();
+        $('modeManual').classList.toggle('active', mode === 'manual');
+        $('modeAuto').classList.toggle('active', mode === 'auto');
+        $('modeAuto').classList.toggle('auto', mode === 'auto');
+        toast.show('Terminal: ' + mode.toUpperCase() + ' mode', mode === 'auto' ? 'warning' : 'info');
+    },
+    
+    setProject(p) {
+        state.currentProject = p;
+        const proj = CONFIG.projects[p];
+        if (proj) {
+            document.querySelector(".project-icon").textContent = proj.icon;
+            document.querySelector(".project-name").textContent = proj.name;
+        }
+        $("projectDropdown").classList.remove("open");
+        terminal.clear();
+        terminal.append("<div class=\"info\">📁 Switched to: " + (proj ? proj.icon + " " + proj.name : p) + "</div>");
+        this.updateContext();
+        toast.show("Project: " + (proj ? proj.name : p), "info");
+    },
+    
+    async loadProjects() {
+        try {
+            const data = await api.getSandboxProjects();
+            const dropdown = $("projectDropdown");
+            dropdown.innerHTML = data.projects.map(function(p) {
+                const conf = CONFIG.projects[p.name] || { icon: "📁", name: p.name };
+                const isActive = p.name === state.currentProject;
+                return "<div class=\"project-option " + (isActive ? "active" : "") + "\" onclick=\"ui.setProject(\x27" + p.name + "\x27)\">" +
+                    "<span>" + conf.icon + "</span>" +
+                    "<span>" + conf.name + "</span>" +
+                    "<span class=\"status-indicator " + p.status + "\"></span>" +
+                "</div>";
+            }).join("");
+        } catch (e) { console.error("Failed to load projects", e); }
+    },
+    
+    toggleFeature(f) { 
+        state.features[f] = !state.features[f]; 
+        $('toggle' + f.charAt(0).toUpperCase() + f.slice(1)).classList.toggle('active'); 
+        this.updateContext(); 
+    },
+    
+    updateContext() {
+        const proj = CONFIG.projects[state.currentProject] || { icon: '📁', name: state.currentProject };
+        const items = ['<div class="context-item active"><span style="color:' + CONFIG.models[state.currentModel].color + '">●</span> ' + CONFIG.models[state.currentModel].name + '</div>'];
+        items.push('<div class="context-item active">' + proj.icon + ' ' + proj.name + '</div>');
+        if (state.features.web) items.push('<div class="context-item active">🌐</div>');
+        if (state.features.terminal) items.push(`<div class="context-item active">⌨️ ${state.terminalMode.toUpperCase()}</div>`);
+        state.contextArtefacts.forEach(a => items.push(`<div class="context-item">📄 ${a.filename.slice(0,12)}... <span class="remove" onclick="ui.removeContext('${a.id}')">×</span></div>`));
+        $('contextBar').innerHTML = items.join('');
+    },
+    
+    addContext(a) { if (!state.contextArtefacts.find(x => x.id === a.id)) { state.contextArtefacts.push(a); this.updateContext(); this.renderArtefacts(state.artefacts); } },
+    removeContext(id) { state.contextArtefacts = state.contextArtefacts.filter(a => a.id !== id); this.updateContext(); this.renderArtefacts(state.artefacts); },
+    
+    updatePending() {
+        $('pendingAttachments').innerHTML = state.pendingFiles.map((f, i) => `<div class="pending-attachment">${fileIcon(f.name.split('.').pop())} ${f.name.slice(0,15)} <button class="pending-attachment-remove" onclick="state.pendingFiles.splice(${i},1);ui.updatePending()">×</button></div>`).join('');
+        $('chatSend').disabled = !$('chatInput').value.trim() && !state.pendingFiles.length;
+    },
+    
+    // Parse message content and add execute buttons to code blocks
+    parseContent(content) {
+        // Replace code blocks with executable wrappers
+        return content.replace(/```(bash|sh|shell|python|py)?\n([\s\S]*?)```/g, (match, lang, code) => {
+            const isExecutable = ['bash', 'sh', 'shell', 'python', 'py', ''].includes(lang || '');
+            const langLabel = lang || 'code';
+            const isPython = ['python', 'py'].includes(lang || '');
+            const codeId = 'code_' + Math.random().toString(36).slice(2, 9);
+            
+            if (isExecutable && state.features.terminal) {
+                return `<div class="code-block-wrapper">
+                    <div class="code-block-header">
+                        <span class="code-block-lang">${langLabel}</span>
+                        <div class="code-block-actions">
+                            <button class="code-exec-btn" onclick="executeCodeBlock('${codeId}', ${isPython})" data-id="${codeId}">▶ Exécuter</button>
+                            <button class="code-copy-btn" onclick="copyCodeBlock('${codeId}')">📋</button>
+                        </div>
+                    </div>
+                    <pre><code id="${codeId}">${esc(code.trim())}</code></pre>
+                </div>`;
+            }
+            return `<div class="code-block-wrapper">
+                <div class="code-block-header">
+                    <span class="code-block-lang">${langLabel}</span>
+                    <div class="code-block-actions">
+                        <button class="code-copy-btn" onclick="copyCodeBlock('${codeId}')">📋</button>
+                    </div>
+                </div>
+                <pre><code id="${codeId}">${esc(code.trim())}</code></pre>
+            </div>`;
+        })
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    },
+    
+    addMessage(role, content, opts = {}) {
+        const m = document.createElement('div');
+        m.className = `message ${role}`;
+        let badge = '';
+        if (role === 'assistant' && opts.model) {
+            badge = `<div class="model-badge"><span class="dot" style="background:${CONFIG.models[opts.model]?.color||'#888'}"></span>${CONFIG.models[opts.model]?.name||opts.model}</div>`;
+        }
+        
+        const parsedContent = role === 'assistant' ? this.parseContent(content) : esc(content);
+        
+        m.innerHTML = `${badge}<div class="message-content">${parsedContent}</div><div class="message-actions"><button class="message-action" onclick="navigator.clipboard.writeText(this.closest('.message').querySelector('.message-content').textContent);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)">Copy</button></div>`;
+        $('chatMessages').appendChild(m);
+        $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+    },
+    
+    addLoading() {
+        const m = document.createElement('div');
+        m.className = 'message assistant'; m.id = 'loading';
+        m.innerHTML = `<div class="model-badge"><span class="dot" style="background:${CONFIG.models[state.currentModel].color}"></span>${CONFIG.models[state.currentModel].name}</div><div class="loading-dots"><span></span><span></span><span></span></div>`;
+        $('chatMessages').appendChild(m);
+        $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+    },
+    removeLoading() { $('loading')?.remove(); },
+    
+    renderArtefacts(list) {
+        state.artefacts = list;
+        $('artefactsCount').textContent = list.length;
+        if (!list.length) { $('artefactsList').innerHTML = '<div class="artefacts-empty"><div class="artefacts-empty-icon">📁</div><div>No artefacts</div></div>'; return; }
+        $('artefactsList').innerHTML = list.map(a => {
+            const ctx = state.contextArtefacts.find(c => c.id === a.id);
+            return `<div class="artefact-item ${ctx?'in-context':''}" data-id="${a.id}">
+                <div class="artefact-icon">${fileIcon(a.file_type)}</div>
+                <div class="artefact-info">
+                    <div class="artefact-name">${esc(a.filename)}</div>
+                    <div class="artefact-meta">${formatSize(a.file_size)} · ${formatDate(a.created_at)}</div>
+                </div>
+                <div class="artefact-actions">
+                    <button class="artefact-action ${ctx?'active':''}" onclick="ui.toggleContext('${a.id}')" title="Add to context">${ctx?'✓':'+'}</button>
+                    <button class="artefact-action" onclick="previewArtefact('${a.id}','${esc(a.filename)}')" title="Preview">👁</button>
+                    <button class="artefact-action" onclick="window.open(CONFIG.apiBase+'/artefacts/${a.id}/download')" title="Download">⬇</button>
+                    <button class="artefact-action delete" onclick="deleteArtefact('${a.id}','${esc(a.filename)}')" title="Delete">✕</button>
+                </div>
+            </div>`;
+        }).join('');
+    },
+    
+    toggleContext(id) { 
+        const a = state.artefacts.find(x => x.id === id); 
+        if (!a) return; 
+        state.contextArtefacts.find(x => x.id === id) ? this.removeContext(id) : this.addContext(a); 
+    },
+    
+    showUpload(name) { $('uploadFileName').textContent = name; $('uploadFill').style.width = '0%'; $('uploadProgress').classList.add('visible'); },
+    updateUpload(pct) { $('uploadFill').style.width = pct + '%'; },
+    hideUpload() { $('uploadProgress').classList.remove('visible'); }
+};
+
+// ============================================================================
+// AUTO MODE CONTROLS
+// ============================================================================
+function toggleAutoPause() {
+    state.autoPaused = !state.autoPaused;
+    $('autoPauseBtn').textContent = state.autoPaused ? '▶' : '⏸';
+    $('autoPauseBtn').style.background = state.autoPaused ? '#f59e0b' : '';
+    
+    if (!state.autoPaused && state.pendingAutoText) {
+        // Resume execution
+        toast.show('Resuming auto mode...', 'info');
+        const text = state.pendingAutoText;
+        state.pendingAutoText = null;
+        autoExecuteCodeBlocks(text);
+    }
+}
+
+function toggleAutoInfinite() {
+    state.autoInfinite = !state.autoInfinite;
+    $('autoInfiniteBtn').style.background = state.autoInfinite ? '#8b5cf6' : '';
+    $('autoInfiniteBtn').style.color = state.autoInfinite ? '#fff' : '';
+    toast.show(state.autoInfinite ? '∞ Unlimited mode ON' : '∞ Limited to 15 iterations', 'info');
+}
+
+function updateAutoControlsVisibility() {
+    const show = state.terminalMode === 'auto';
+    $('autoControls').style.display = show ? 'flex' : 'none';
+    if (!show) {
+        state.autoRecursionCount = 0;
+        state.autoPaused = false;
+        if ($('autoIterCount')) $('autoIterCount').textContent = '0';
+        if ($('autoPauseBtn')) $('autoPauseBtn').textContent = '⏸';
+    }
+}
+
+// ============================================================================
+// GLOBAL FUNCTIONS
+// ============================================================================
+async function loadArtefacts() {
+    try {
+        const filter = document.querySelector('.artefacts-filter.active')?.dataset.filter || 'all';
+        const data = await api.getArtefacts(filter === 'all' ? null : filter);
+        ui.renderArtefacts(data.artefacts || []);
+    } catch (e) { console.error(e); }
+}
+
+async function uploadFile(file) {
+    ui.showUpload(file.name);
+    try {
+        await api.uploadArtefact(file, pct => ui.updateUpload(pct));
+        ui.updateUpload(100);
+        setTimeout(() => { ui.hideUpload(); loadArtefacts(); toast.show('Uploaded ' + file.name, 'success'); }, 500);
+    } catch (e) { ui.hideUpload(); toast.show('Upload failed', 'error'); }
+}
+
+async function deleteArtefact(id, name) {
+    if (!confirm(`Delete "${name}"?`)) return;
+    try {
+        await api.deleteArtefact(id);
+        toast.show('Deleted ' + name, 'success');
+        loadArtefacts();
+    } catch (e) { toast.show('Delete failed', 'error'); }
+}
+
+async function previewArtefact(id, name) {
+    try {
+        const content = await api.previewArtefact(id);
+        $('previewTitle').textContent = name;
+        $('previewContent').textContent = content;
+        $('previewModal').classList.add('visible');
+    } catch { toast.show('Preview unavailable', 'warning'); }
+}
+
+// Execute code block from chat
+async function executeCodeBlock(codeId, isPython = false) {
+    const codeEl = document.getElementById(codeId);
+    if (!codeEl) return;
+    
+    const code = codeEl.textContent;
+    const btn = document.querySelector(`[data-id="${codeId}"]`);
+    
+    if (btn) {
+        btn.textContent = '⏳ Running...';
+        btn.classList.add('running');
+    }
+    
+    await terminal.execute(code, isPython);
+    
+    if (btn) {
+        btn.textContent = '▶ Exécuter';
+        btn.classList.remove('running');
+    }
+}
+
+function copyCodeBlock(codeId) {
+    const codeEl = document.getElementById(codeId);
+    if (codeEl) {
+        navigator.clipboard.writeText(codeEl.textContent);
+        toast.show('Copied!', 'success');
+    }
+}
+
+async function sendMessage() {
+    const content = $('chatInput').value.trim();
+    if (!content && !state.pendingFiles.length) return;
+    if (state.isStreaming) return;
+    
+    state.isStreaming = true;
+    $('chatSend').disabled = true;
+    // Safety timeout: unlock after 120s max
+    const safetyTimeout = setTimeout(() => {
+        if (state.isStreaming) {
+            state.isStreaming = false;
+            $('chatSend').disabled = false;
+            toast.show('Chat unlocked (safety timeout)', 'warning');
+        }
+    }, 120000);
+    $('chatInput').value = '';
+    $('chatInput').style.height = 'auto';
+    
+    const attachments = [...state.pendingFiles];
+    state.pendingFiles = [];
+    ui.updatePending();
+    
+    for (const f of attachments) await uploadFile(f);
+    
+    // Check if user is confirming execution (oui, yes, ok, go, lance, execute)
+    const isConfirmation = state.lastAssistantCodeMessage && 
+        /^(oui|yes|ok|go|lance|execute|vas-y|allez|do it|run|fais-le)$/i.test(content.trim());
+    
+    if (isConfirmation) {
+        ui.addMessage('user', content);
+        ui.addMessage('assistant', '⚡ Exécution en cours...', { model: state.currentModel });
+        const codeToExecute = state.lastAssistantCodeMessage;
+        state.lastAssistantCodeMessage = null;
+        try {
+            await autoExecuteCodeBlocks(codeToExecute);
+        } catch (e) {
+            ui.addMessage('assistant', 'Error during execution: ' + e.message, { model: state.currentModel });
+        }
+        state.isStreaming = false;
+        $('chatSend').disabled = false;
+        $('chatInput').focus();
+        loadArtefacts();
+        return;
+    }
+    
+    ui.addMessage('user', content || 'Uploaded files');
+    ui.addLoading();
+    
+    try {
+        const r = await api.sendMessage(content);
+        state.sessionId = r.session_id;
+        ui.removeLoading();
+        ui.addMessage('assistant', r.message.content, { model: state.currentModel });
+        // Parse and create any documents in the response
+        await parseAndCreateDocuments(r.message.content);
+        // Auto-execute code blocks if in AUTO mode
+        // Only auto-execute if LLM is not asking for confirmation
+        const isAskingConfirmation = r.message.content.toLowerCase().includes('veux-tu que je lance') || 
+                                      r.message.content.toLowerCase().includes('veux-tu que j\'exécute') ||
+                                      r.message.content.toLowerCase().includes('shall i run') ||
+                                      r.message.content.toLowerCase().includes('want me to execute');
+        if (isAskingConfirmation) {
+            // Store message for when user confirms
+            state.lastAssistantCodeMessage = r.message.content;
+        } else {
+            state.lastAssistantCodeMessage = null;
+            await autoExecuteCodeBlocks(r.message.content);
+        }
+    } catch (e) {
+        ui.removeLoading();
+        ui.addMessage('assistant', 'Error: ' + e.message, { model: state.currentModel });
+        toast.show('Failed to get response', 'error');
+    }
+    
+    state.isStreaming = false;
+    $('chatSend').disabled = false;
+    clearTimeout(safetyTimeout);
+    state.autoRecursionCount = 0; if ($('autoIterCount')) $('autoIterCount').textContent = '0';
+    $('chatInput').focus();
+    loadArtefacts();
+}
+
+// ============================================================================
+// INIT
+// ============================================================================
+let dragCounter = 0;
+
+// Project selector
+$('projectBtn').addEventListener('click', () => {
+    $('projectDropdown').classList.toggle('open');
+    ui.loadProjects();
+});
+document.addEventListener("click", (e) => { if (!e.target.closest(".project-selector")) $("projectDropdown").classList.remove("open"); });
+document.addEventListener('dragenter', e => { e.preventDefault(); dragCounter++; $('dropOverlay').classList.add('visible'); });
+document.addEventListener('dragleave', e => { e.preventDefault(); if (--dragCounter === 0) $('dropOverlay').classList.remove('visible'); });
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', async e => {
+    e.preventDefault(); dragCounter = 0; $('dropOverlay').classList.remove('visible');
+    const files = [...e.dataTransfer.files];
+    if (document.querySelector('.chat-panel').contains(e.target)) { state.pendingFiles.push(...files); ui.updatePending(); }
+    else for (const f of files) await uploadFile(f);
+});
+
+(async function init() {
+    const ok = await api.checkHealth();
+    ui.setStatus(ok);
+    ui.updateContext();
+    loadArtefacts();
+    
+    // Model selector
+    $('modelSelector').onclick = e => { const b = e.target.closest('.model-option'); if (b) ui.setModel(b.dataset.model); };
+    
+    // Feature toggles
+    $('toggleWeb').onclick = () => ui.toggleFeature('web');
+    $('toggleOCR').onclick = () => ui.toggleFeature('ocr');
+    $('toggleTerminal').onclick = () => ui.toggleFeature('terminal');
+    
+    // Terminal mode toggle
+    $('modeManual').onclick = () => ui.setTerminalMode('manual');
+    $('modeAuto').onclick = () => ui.setTerminalMode('auto');
+    
+    // Chat input
+    $('chatInput').oninput = () => { 
+        $('chatInput').style.height = 'auto'; 
+        $('chatInput').style.height = Math.min($('chatInput').scrollHeight, 150) + 'px'; 
+        $('chatSend').disabled = !$('chatInput').value.trim() && !state.pendingFiles.length; 
+    };
+    $('chatInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
+    $('chatSend').onclick = sendMessage;
+    $('fileInput').onchange = e => { state.pendingFiles.push(...e.target.files); ui.updatePending(); e.target.value = ''; };
+    
+    // Artefacts
+    $('artefactUpload').onchange = async e => { for (const f of e.target.files) await uploadFile(f); e.target.value = ''; };
+    $('artefactsFilters').onclick = e => { const b = e.target.closest('.artefacts-filter'); if (b) { document.querySelectorAll('.artefacts-filter').forEach(x => x.classList.remove('active')); b.classList.add('active'); loadArtefacts(); } };
+    
+    // Terminal manual input
+    $('terminalInput').onkeydown = async e => { 
+        if (e.key === 'Enter') { 
+            const cmd = $('terminalInput').value.trim(); 
+            if (cmd) {
+                $('terminalInput').value = ''; 
+                await terminal.execute(cmd);
+            }
+        } 
+    };
+    
+    // Modals
+    $('previewClose').onclick = () => $('previewModal').classList.remove('visible');
+    $('previewModal').onclick = e => { if (e.target === $('previewModal')) $('previewModal').classList.remove('visible'); };
+    $('settingsClose').onclick = () => $('settingsModal').classList.remove('visible');
+    
+    // Keyboard shortcuts
+    document.onkeydown = e => {
+        if (e.key === 'Escape') { $('previewModal').classList.remove('visible'); $('settingsModal').classList.remove('visible'); }
+        if (e.ctrlKey && e.key === ',') { e.preventDefault(); $('settingsModal').classList.add('visible'); }
+    };
+    
+    // Auto refresh
+    setInterval(async () => ui.setStatus(await api.checkHealth()), 30000);
+    setInterval(loadArtefacts, 60000);
+    
+    toast.show(ok ? 'ACP ready' : 'Backend offline', ok ? 'success' : 'warning');
+})();
+    </script>
+
+<!-- ACP_SHARED_ROOM_PATCH_V1 -->
+<script>
+(() => {
+    const $ = window.$ || ((id) => document.getElementById(id));
+    if (!window.api || !window.ui || !window.state) return;
+
+    const PARTICIPANTS_FALLBACK = {
+        julien: { label: 'Julien', avatar: 'J', className: 'julien' },
+        nico: { label: 'Nico', avatar: 'N', className: 'nico' },
+        assistant: { label: 'ACP', avatar: 'ACP', className: 'assistant' }
+    };
+    window.PARTICIPANTS = window.PARTICIPANTS || PARTICIPANTS_FALLBACK;
+    window.MESSAGE_MODE_LABELS = window.MESSAGE_MODE_LABELS || {
+        discussion: 'Discussion',
+        'ask-acp': 'Question ACP',
+        decision: 'Décision',
+        todo: 'To-do'
+    };
+    window.cleanACPTrigger = window.cleanACPTrigger || (content => (content || '').replace(/(^|\s)@acp\b/ig, ' ').replace(/\n{3,}/g, '\n\n').trim());
+    window.isDirectACPCall = window.isDirectACPCall || ((content, mode) => mode === 'ask-acp' || /(^|\s)@acp\b/i.test(content || ''));
+    window.buildAssistantPrompt = window.buildAssistantPrompt || function(content, sender, mode) {
+        const senderLabel = (window.PARTICIPANTS[sender] || { label: 'Utilisateur' }).label;
+        const cleaned = window.cleanACPTrigger(content);
+        const modeLabel = (window.MESSAGE_MODE_LABELS[mode] || 'Discussion');
+        return `[ROOM CONTEXT]\nRoom: ACP / principale\nSpeaker: ${senderLabel}\nMessage type: ${modeLabel}\nParticipants: Julien, Nico, ACP\nInstruction: Réponds dans le fil partagé. Si c'est une décision ou un to-do, reformule clairement et propose le prochain petit pas concret.\n\n[USER MESSAGE]\n${cleaned || content}`;
+    };
+    window.renderStoredTimeline = window.renderStoredTimeline || function() {
+        if (!$('chatMessages') || !window.ui.addMessage) return;
+        $('chatMessages').innerHTML = '';
+        state.lastRenderedDay = null;
+        (state.timeline || []).forEach(msg => ui.addMessage(msg.role, msg.content, { ...msg, skipPersist: true }));
+    };
+
+    const room = {
+        id: 'main',
+        clientId: null,
+        lastMessageId: 0,
+        pollTimer: null,
+        presenceTimer: null
+    };
+
+    function ensureClientId() {
+        if (room.clientId) return room.clientId;
+        const existing = localStorage.getItem('acp-client-id');
+        if (existing) {
+            room.clientId = existing;
+            state.clientId = existing;
+            return existing;
+        }
+        const value = (globalThis.crypto && globalThis.crypto.randomUUID)
+            ? globalThis.crypto.randomUUID()
+            : 'client_' + Math.random().toString(36).slice(2);
+        room.clientId = value;
+        state.clientId = value;
+        localStorage.setItem('acp-client-id', value);
+        return value;
+    }
+
+    state.roomId = room.id;
+    state.clientId = state.clientId || localStorage.getItem('acp-client-id') || null;
+
+    api.getRoom = api.getRoom || ((roomId, afterId = 0) => api.fetch(`/rooms/${roomId}` + (afterId ? `?after_id=${afterId}` : '')));
+    api.postRoomMessage = api.postRoomMessage || ((roomId, payload) => api.fetch(`/rooms/${roomId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+    }));
+    api.roomHeartbeat = api.roomHeartbeat || ((roomId, participantKey, clientId) => api.fetch(`/rooms/${roomId}/presence`, {
+        method: 'POST',
+        body: JSON.stringify({
+            participant_key: participantKey,
+            participant_label: (window.PARTICIPANTS[participantKey] || { label: participantKey }).label,
+            client_id: clientId
+        })
+    }));
+
+    function normalizeRoomMessage(msg) {
+        return {
+            roomMessageId: msg.id,
+            role: msg.role,
+            content: msg.content,
+            author: msg.author_key,
+            type: msg.message_type,
+            model: msg.model || null,
+            timestamp: msg.created_at
+        };
+    }
+
+    function hasRoomMessage(id) {
+        return (state.timeline || []).some(x => x.roomMessageId === id);
+    }
+
+    function appendRoomMessages(messages) {
+        for (const raw of messages || []) {
+            const msg = normalizeRoomMessage(raw);
+            if (hasRoomMessage(msg.roomMessageId)) continue;
+            state.timeline.push(msg);
+            ui.addMessage(msg.role, msg.content, { ...msg, skipPersist: true });
+        }
+    }
+
+    function replaceRoomMessages(messages) {
+        state.timeline = (messages || []).map(normalizeRoomMessage);
+        window.renderStoredTimeline();
+    }
+
+    function setPresence(selector, online, label) {
+        const el = document.querySelector(selector);
+        if (!el) return;
+        el.classList.toggle('offline', !online);
+        let stateEl = el.querySelector('.presence-state');
+        if (!stateEl) {
+            stateEl = document.createElement('span');
+            stateEl.className = 'presence-state';
+            el.appendChild(stateEl);
+        }
+        stateEl.textContent = label;
+    }
+
+    function renderPresence(online) {
+        const byKey = {};
+        (online || []).forEach(p => { if (p.is_online) byKey[p.participant_key] = p; });
+        setPresence('.presence-pill.julien', !!byKey.julien, byKey.julien ? 'online' : 'offline');
+        setPresence('.presence-pill.nico', !!byKey.nico, byKey.nico ? 'online' : 'offline');
+        setPresence('.presence-pill.acp', true, 'ready');
+    }
+
+    async function heartbeatRoom() {
+        await api.roomHeartbeat(room.id, state.currentSender || 'julien', ensureClientId());
+    }
+
+    async function syncRoom(initial = false) {
+        const data = await api.getRoom(room.id, initial ? 0 : room.lastMessageId);
+        if (initial) {
+            replaceRoomMessages(data.messages || []);
+        } else {
+            appendRoomMessages(data.messages || []);
+        }
+        room.lastMessageId = Math.max(room.lastMessageId || 0, data.last_message_id || 0, ...((data.messages || []).map(m => m.id || 0)));
+        renderPresence(data.online || []);
+    }
+
+    async function startRoomSync() {
+        await heartbeatRoom().catch(() => {});
+        await syncRoom(true).catch(err => console.warn('room init failed', err));
+        clearInterval(room.pollTimer);
+        clearInterval(room.presenceTimer);
+        room.pollTimer = setInterval(() => syncRoom(false).catch(() => {}), 2000);
+        room.presenceTimer = setInterval(() => heartbeatRoom().catch(() => {}), 15000);
+    }
+
+    const origSetSender = ui.setSender ? ui.setSender.bind(ui) : null;
+    if (origSetSender) {
+        ui.setSender = function(sender) {
+            origSetSender(sender);
+            heartbeatRoom().catch(() => {});
+        };
+    }
+
+    window.sendMessage = async function() {
+        const content = $('chatInput').value.trim();
+        if (!content && !(state.pendingFiles || []).length) return;
+        if (state.isStreaming) return;
+
+        state.isStreaming = true;
+        $('chatSend').disabled = true;
+
+        const safetyTimeout = setTimeout(() => {
+            if (state.isStreaming) {
+                state.isStreaming = false;
+                $('chatSend').disabled = false;
+                if (window.toast) toast.show('Chat unlocked (safety timeout)', 'warning');
+            }
+        }, 120000);
+
+        $('chatInput').value = '';
+        $('chatInput').style.height = 'auto';
+
+        const attachments = [...(state.pendingFiles || [])];
+        state.pendingFiles = [];
+        if (ui.updatePending) ui.updatePending();
+
+        for (const f of attachments) {
+            if (window.uploadFile) await uploadFile(f);
+        }
+
+        const displayedContent = content || 'Uploaded files';
+        const shouldInvokeACP = window.isDirectACPCall(displayedContent, state.messageMode);
+        const authorKey = state.currentSender || 'julien';
+        const authorLabel = (window.PARTICIPANTS[authorKey] || { label: authorKey }).label;
+
+        const postedUserMessage = await api.postRoomMessage(room.id, {
+            role: 'user',
+            author_key: authorKey,
+            author_label: authorLabel,
+            message_type: state.messageMode || 'discussion',
+            content: displayedContent
+        });
+
+        appendRoomMessages([postedUserMessage]);
+        room.lastMessageId = Math.max(room.lastMessageId || 0, postedUserMessage.id || 0);
+
+        const isConfirmation = state.lastAssistantCodeMessage &&
+            /^(oui|yes|ok|go|lance|execute|vas-y|allez|do it|run|fais-le)$/i.test(content.trim());
+
+        if (isConfirmation) {
+            const progressMessage = await api.postRoomMessage(room.id, {
+                role: 'assistant',
+                author_key: 'assistant',
+                author_label: 'ACP',
+                message_type: 'ask-acp',
+                content: '⚡ Exécution en cours...',
+                model: state.currentModel
+            }).catch(() => null);
+            if (progressMessage) appendRoomMessages([progressMessage]);
+
+            const codeToExecute = state.lastAssistantCodeMessage;
+            state.lastAssistantCodeMessage = null;
+
+            try {
+                if (window.autoExecuteCodeBlocks) await autoExecuteCodeBlocks(codeToExecute);
+            } catch (e) {
+                const errMsg = await api.postRoomMessage(room.id, {
+                    role: 'assistant',
+                    author_key: 'assistant',
+                    author_label: 'ACP',
+                    message_type: 'ask-acp',
+                    content: 'Error during execution: ' + e.message,
+                    model: state.currentModel
+                }).catch(() => null);
+                if (errMsg) appendRoomMessages([errMsg]);
+            }
+
+            state.isStreaming = false;
+            $('chatSend').disabled = false;
+            clearTimeout(safetyTimeout);
+            $('chatInput').focus();
+            if (window.loadArtefacts) loadArtefacts();
+            return;
+        }
+
+        if (!shouldInvokeACP) {
+            state.isStreaming = false;
+            $('chatSend').disabled = false;
+            clearTimeout(safetyTimeout);
+            $('chatInput').focus();
+            if (window.loadArtefacts) loadArtefacts();
+            return;
+        }
+
+        if (ui.addLoading) ui.addLoading();
+
+        try {
+            const r = await api.sendMessage(window.buildAssistantPrompt(displayedContent, authorKey, state.messageMode || 'discussion'));
+            if (ui.removeLoading) ui.removeLoading();
+            state.sessionId = r.session_id;
+
+            const assistantMessage = await api.postRoomMessage(room.id, {
+                role: 'assistant',
+                author_key: 'assistant',
+                author_label: 'ACP',
+                message_type: 'ask-acp',
+                content: r.message.content,
+                model: state.currentModel
+            });
+            appendRoomMessages([assistantMessage]);
+            room.lastMessageId = Math.max(room.lastMessageId || 0, assistantMessage.id || 0);
+
+            if (window.parseAndCreateDocuments) await parseAndCreateDocuments(r.message.content);
+
+            const lower = r.message.content.toLowerCase();
+            const isAskingConfirmation = lower.includes('veux-tu que je lance') ||
+                lower.includes("veux-tu que j'exécute") ||
+                lower.includes('shall i run') ||
+                lower.includes('want me to execute');
+
+            if (isAskingConfirmation) {
+                state.lastAssistantCodeMessage = r.message.content;
+            } else {
+                state.lastAssistantCodeMessage = null;
+                if (window.autoExecuteCodeBlocks) await autoExecuteCodeBlocks(r.message.content);
+            }
+        } catch (e) {
+            if (ui.removeLoading) ui.removeLoading();
+            const errMsg = await api.postRoomMessage(room.id, {
+                role: 'assistant',
+                author_key: 'assistant',
+                author_label: 'ACP',
+                message_type: 'ask-acp',
+                content: 'Error: ' + e.message,
+                model: state.currentModel
+            }).catch(() => null);
+            if (errMsg) appendRoomMessages([errMsg]);
+            if (window.toast) toast.show('Failed to get response', 'error');
+        }
+
+        state.isStreaming = false;
+        $('chatSend').disabled = false;
+        clearTimeout(safetyTimeout);
+        state.autoRecursionCount = 0;
+        if ($('autoIterCount')) $('autoIterCount').textContent = '0';
+        $('chatInput').focus();
+        if (window.loadArtefacts) loadArtefacts();
+    };
+
+    function rebindSendHandlers() {
+        if ($('chatSend')) $('chatSend').onclick = window.sendMessage;
+        if ($('chatInput')) {
+            $('chatInput').onkeydown = e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    window.sendMessage();
+                }
+            };
+        }
+    }
+
+    if (!document.getElementById('acp-shared-room-style')) {
+        const style = document.createElement('style');
+        style.id = 'acp-shared-room-style';
+        style.textContent = `
+            .presence-pill.offline { opacity: 0.45; }
+            .presence-state { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; margin-left: 4px; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    ensureClientId();
+    rebindSendHandlers();
+    startRoomSync();
+})();
+</script>
+
+
+<!-- ACP_CHAT_TAB_PATCH_V1 -->
+<style id="acp-chat-tab-style">
+    .model-option[data-model="chat"] .dot { background: #64748b; }
+</style>
+<script>
+(() => {
+    const $ = window.$ || ((id) => document.getElementById(id));
+    if (!window.state || !window.ui || !window.CONFIG) return;
+
+    const CHAT_MODELS = new Set(['deepseek', 'claude', 'qwen']);
+
+    state.chatMode = state.chatMode !== false;
+    state.messageMode = state.messageMode || 'discussion';
+    if (!CHAT_MODELS.has(state.currentModel)) state.currentModel = 'deepseek';
+
+    function ensureChatButton() {
+        const selector = $('modelSelector');
+        if (!selector) return null;
+
+        let btn = selector.querySelector('[data-model="chat"]');
+        if (btn) return btn;
+
+        btn = document.createElement('button');
+        btn.className = 'model-option chat-tab active';
+        btn.dataset.model = 'chat';
+        btn.innerHTML = '<span class="dot"></span>Chat';
+        selector.insertBefore(btn, selector.firstChild);
+        return btn;
+    }
+
+    function refreshModelButtons() {
+        document.querySelectorAll('#modelSelector .model-option').forEach(btn => {
+            const model = btn.dataset.model;
+            if (model === 'chat') {
+                btn.classList.toggle('active', !!state.chatMode);
+            } else if (CHAT_MODELS.has(model)) {
+                btn.classList.toggle('active', !state.chatMode && model === state.currentModel);
+            }
+        });
+    }
+
+    function refreshPlaceholder() {
+        const input = $('chatInput');
+        if (!input) return;
+        input.placeholder = state.chatMode
+            ? 'Message chat… (@acp pour ACP)'
+            : `Message ${CONFIG.models[state.currentModel]?.name || 'ACP'}...`;
+    }
+
+    function renderChatContextBar() {
+        const bar = $('contextBar');
+        if (!bar) return;
+
+        const senderKey = state.currentSender || 'julien';
+        const senderLabel = (window.PARTICIPANTS?.[senderKey] || { label: senderKey }).label;
+        const modelLabel = CONFIG.models[state.currentModel]?.name || state.currentModel || 'DeepSeek';
+
+        const items = [
+            '<div class="context-item active">💬 Chat partagé</div>',
+            `<div class="context-item">👤 ${senderLabel}</div>`,
+            `<div class="context-item">🤖 ${modelLabel} via @acp</div>`,
+        ];
+
+        if (state.features?.terminal) items.push('<div class="context-item">⌨️ Terminal</div>');
+        if (state.features?.web) items.push('<div class="context-item">🌐 Web</div>');
+        if (state.features?.ocr) items.push('<div class="context-item">📷 OCR</div>');
+
+        bar.innerHTML = items.join('');
+    }
+
+    const originalUpdateContextBar = ui.updateContextBar ? ui.updateContextBar.bind(ui) : null;
+    if (originalUpdateContextBar) {
+        ui.updateContextBar = function(...args) {
+            if (state.chatMode) {
+                renderChatContextBar();
+                return;
+            }
+            return originalUpdateContextBar(...args);
+        };
+    }
+
+    const originalSetModel = ui.setModel ? ui.setModel.bind(ui) : null;
+    if (originalSetModel) {
+        ui.setModel = function(model) {
+            ensureChatButton();
+
+            if (model === 'chat') {
+                state.chatMode = true;
+                refreshModelButtons();
+                refreshPlaceholder();
+                if (typeof ui.updateContextBar === 'function') ui.updateContextBar();
+                return;
+            }
+
+            if (CHAT_MODELS.has(model)) {
+                state.chatMode = false;
+                const out = originalSetModel(model);
+                refreshModelButtons();
+                refreshPlaceholder();
+                if (typeof ui.updateContextBar === 'function') ui.updateContextBar();
+                return out;
+            }
+
+            return originalSetModel(model);
+        };
+    }
+
+    const originalIsDirectACPCall =
+        window.isDirectACPCall ||
+        ((content, mode) => mode === 'ask-acp' || /(^|\s)@acp\b/i.test(content || ''));
+
+    window.isDirectACPCall = function(content, mode) {
+        if (!state.chatMode) return true;
+        return originalIsDirectACPCall(content, mode);
+    };
+
+    const originalSetSender = ui.setSender ? ui.setSender.bind(ui) : null;
+    if (originalSetSender) {
+        ui.setSender = function(sender) {
+            const out = originalSetSender(sender);
+            if (state.chatMode && typeof ui.updateContextBar === 'function') ui.updateContextBar();
+            return out;
+        };
+    }
+
+    ensureChatButton();
+    state.chatMode = true;
+    refreshModelButtons();
+    refreshPlaceholder();
+    if (typeof ui.updateContextBar === 'function') ui.updateContextBar();
+})();
+</script>
+
+
+<!-- ACP_UPLOAD_ARTEFACT_SYNC_V1 -->
+<script>
+(() => {
+    if (window.__ACP_UPLOAD_ARTEFACT_SYNC_V1__) return;
+    window.__ACP_UPLOAD_ARTEFACT_SYNC_V1__ = true;
+
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    async function safeLoadArtefacts() {
+        try {
+            if (typeof window.loadArtefacts === 'function') {
+                await window.loadArtefacts();
+            }
+        } catch (e) {
+            console.warn('loadArtefacts failed', e);
+        }
+    }
+
+    async function refreshArtefactsBurst() {
+        await safeLoadArtefacts();
+        for (const ms of [500, 1500, 4000]) {
+            await wait(ms);
+            await safeLoadArtefacts();
+        }
+    }
+
+    window.refreshArtefactsBurst = refreshArtefactsBurst;
+
+    function wrapUploadFile() {
+        if (typeof window.uploadFile !== 'function') return false;
+        if (window.uploadFile.__acpWrappedForArtefacts) return true;
+
+        const originalUploadFile = window.uploadFile;
+
+        const wrapped = async function(file, ...args) {
+            const result = await originalUploadFile.call(this, file, ...args);
+
+            try {
+                if (window.state) {
+                    window.state.lastUploadedFiles = window.state.lastUploadedFiles || [];
+                    if (file && file.name) {
+                        window.state.lastUploadedFiles.unshift({
+                            name: file.name,
+                            size: file.size || 0,
+                            type: file.type || '',
+                            uploadedAt: new Date().toISOString()
+                        });
+                        window.state.lastUploadedFiles = window.state.lastUploadedFiles.slice(0, 20);
+                    }
+                }
+            } catch (e) {
+                console.warn('lastUploadedFiles tracking failed', e);
+            }
+
+            refreshArtefactsBurst().catch(err => console.warn('artefact refresh burst failed', err));
+            return result;
+        };
+
+        wrapped.__acpWrappedForArtefacts = true;
+        window.uploadFile = wrapped;
+        return true;
+    }
+
+    function wrapSendMessage() {
+        if (typeof window.sendMessage !== 'function') return false;
+        if (window.sendMessage.__acpWrappedForArtefacts) return true;
+
+        const originalSendMessage = window.sendMessage;
+
+        const wrapped = async function(...args) {
+            const hadPendingFiles = !!(window.state && Array.isArray(window.state.pendingFiles) && window.state.pendingFiles.length);
+            const result = await originalSendMessage.apply(this, args);
+
+            if (hadPendingFiles) {
+                refreshArtefactsBurst().catch(err => console.warn('post-send artefact refresh failed', err));
+            }
+
+            return result;
+        };
+
+        wrapped.__acpWrappedForArtefacts = true;
+        window.sendMessage = wrapped;
+        return true;
+    }
+
+    function wireFileInput() {
+        const input = document.getElementById('fileInput');
+        if (!input || input.__acpArtefactSyncBound) return false;
+
+        input.__acpArtefactSyncBound = true;
+        input.addEventListener('change', () => {
+            setTimeout(() => {
+                refreshArtefactsBurst().catch(err => console.warn('file-input refresh failed', err));
+            }, 100);
+        });
+
+        return true;
+    }
+
+    function install() {
+        wrapUploadFile();
+        wrapSendMessage();
+        wireFileInput();
+    }
+
+    install();
+    setTimeout(install, 500);
+    setTimeout(install, 1500);
+})();
+</script>
+
+
+<!-- ACP_UPLOAD_CONTEXT_PIPELINE_V1 -->
+<script>
+(() => {
+    if (window.__ACP_UPLOAD_CONTEXT_PIPELINE_V1__) return;
+    window.__ACP_UPLOAD_CONTEXT_PIPELINE_V1__ = true;
+
+    const processed = new Set();
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    async function safeLoadArtefacts() {
+        try {
+            if (typeof window.loadArtefacts === 'function') {
+                await window.loadArtefacts();
+            }
+        } catch (e) {
+            console.warn('safeLoadArtefacts failed', e);
+        }
+    }
+
+    function getActiveModel() {
+        if (window.CONFIG?.models?.[window.state?.currentModel]) return window.state.currentModel;
+        return 'deepseek';
+    }
+
+    function getProjectKey() {
+        return String(window.state?.currentProject || 'acp').replace(/[^a-z0-9_-]+/ig, '_');
+    }
+
+    function getContextFilename() {
+        return `ACP_CONTEXT_${getProjectKey()}.md`;
+    }
+
+    function ensureArtefactInContext(a) {
+        if (!a || !a.id) return;
+        try {
+            if (window.ui?.addContext) {
+                window.ui.addContext(a);
+            } else {
+                window.state.contextArtefacts = window.state.contextArtefacts || [];
+                if (!window.state.contextArtefacts.find(x => x.id === a.id)) {
+                    window.state.contextArtefacts.push(a);
+                }
+                if (window.ui?.updateContext) window.ui.updateContext();
+            }
+            if (window.ui?.updateContextBar) window.ui.updateContextBar();
+        } catch (e) {
+            console.warn('ensureArtefactInContext failed', e);
+        }
+    }
+
+    async function findArtefactByFilename(filename) {
+        await safeLoadArtefacts();
+        return (window.state?.artefacts || []).find(a => a.filename === filename) || null;
+    }
+
+    async function readArtefactPreview(artefactId) {
+        try {
+            const r = await window.api.previewArtefact(artefactId);
+            return r?.content || r?.text || r?.preview || (typeof r === 'string' ? r : '');
+        } catch (e) {
+            console.warn('readArtefactPreview failed', e);
+            return '';
+        }
+    }
+
+    function buildDocHeader() {
+        const project = window.state?.currentProject || 'acp';
+        return [
+            '# ACP_CONTEXT',
+            '',
+            `Projet: ${project}`,
+            '',
+            'Résumé auto-généré des documents ajoutés au contexte du projet.',
+            'Ce fichier sert de mémoire de travail synthétique pour ACP.',
+            ''
+        ].join('\n');
+    }
+
+    function escapeRegex(s) {
+        return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function buildArtefactSection(artefact, summary) {
+        const createdAt = artefact.created_at || new Date().toISOString();
+        return [
+            `<!-- ACP_ARTEFACT:${artefact.id}:START -->`,
+            `## ${artefact.filename}`,
+            '',
+            `- Artefact ID: ${artefact.id}`,
+            `- Source: ${artefact.source || 'upload'}`,
+            `- Type: ${artefact.file_type || artefact.mime_type || 'unknown'}`,
+            `- Taille: ${artefact.file_size || 0}`,
+            `- Date: ${createdAt}`,
+            '',
+            summary.trim(),
+            `<!-- ACP_ARTEFACT:${artefact.id}:END -->`
+        ].join('\n');
+    }
+
+    function upsertArtefactSection(existingContent, artefact, summary) {
+        let content = (existingContent || '').trim();
+        if (!content) content = buildDocHeader();
+
+        const section = buildArtefactSection(artefact, summary);
+        const start = `<!-- ACP_ARTEFACT:${artefact.id}:START -->`;
+        const end = `<!-- ACP_ARTEFACT:${artefact.id}:END -->`;
+        const re = new RegExp(`${escapeRegex(start)}[\\s\\S]*?${escapeRegex(end)}`, 'm');
+
+        if (re.test(content)) {
+            content = content.replace(re, section);
+        } else {
+            content = content.replace(/\s*$/, '');
+            content += '\n\n---\n\n' + section + '\n';
+        }
+        return content.trim() + '\n';
+    }
+
+    async function summarizeArtefactWithLLM(artefact) {
+        const model = getActiveModel();
+        const prompt = [
+            'Tu résumes un document ajouté à un projet ACP.',
+            'Objectif: produire une mémoire de contexte concise, actionnable et fidèle.',
+            '',
+            'Format attendu:',
+            '- 5 à 12 puces maximum',
+            '- points factuels uniquement',
+            '- inclure objectifs, contraintes, décisions, hypothèses, TODO, risques si présents',
+            '- pas de bla-bla',
+            '- français',
+            '',
+            `Document cible: ${artefact.filename}`
+        ].join('\n');
+
+        const response = await window.api.fetch(window.CONFIG.models[model].endpoint, {
+            method: 'POST',
+            body: JSON.stringify({
+                messages: [{ role: 'user', content: prompt }],
+                session_id: window.state?.sessionId || null,
+                model,
+                artefact_ids: [artefact.id]
+            })
+        });
+
+        return (response?.message?.content || '').trim();
+    }
+
+    async function upsertProjectContextDoc(artefact, summary) {
+        const filename = getContextFilename();
+        let existing = await findArtefactByFilename(filename);
+        let existingContent = '';
+
+        if (existing?.id) {
+            existingContent = await readArtefactPreview(existing.id);
+        }
+
+        const newContent = upsertArtefactSection(existingContent, artefact, summary);
+
+        if (existing?.id) {
+            await window.api.updateDocument(existing.id, newContent);
+        } else {
+            await window.api.createDocument(
+                newContent,
+                filename,
+                'md',
+                `ACP Context ${window.state?.currentProject || 'acp'}`
+            );
+        }
+
+        await wait(400);
+        await safeLoadArtefacts();
+
+        existing = await findArtefactByFilename(filename);
+        if (existing) ensureArtefactInContext(existing);
+        return existing;
+    }
+
+    async function processUploadedArtefact(artefact) {
+        if (!artefact || !artefact.id) return artefact;
+        if (processed.has(artefact.id)) return artefact;
+        processed.add(artefact.id);
+
+        ensureArtefactInContext(artefact);
+
+        try {
+            if (window.toast) {
+                window.toast.show(`📎 Ajouté au contexte: ${artefact.filename}`, 'success');
+            }
+        } catch {}
+
+        try {
+            const summary = await summarizeArtefactWithLLM(artefact);
+            if (summary) {
+                const contextDoc = await upsertProjectContextDoc(artefact, summary);
+                if (window.toast) {
+                    window.toast.show(
+                        `🧠 ${contextDoc?.filename || getContextFilename()} mis à jour`,
+                        'success'
+                    );
+                }
+            }
+        } catch (e) {
+            console.warn('ACP context generation failed', e);
+            if (window.toast) {
+                window.toast.show(`Résumé auto indisponible pour ${artefact.filename}`, 'warning');
+            }
+        }
+
+        return artefact;
+    }
+
+    function wrapUploadFile() {
+        if (typeof window.uploadFile !== 'function') return false;
+        if (window.uploadFile.__acpContextWrapped) return true;
+
+        const originalUploadFile = window.uploadFile;
+
+        const wrapped = async function(file, ...args) {
+            const result = await originalUploadFile.call(this, file, ...args);
+            try {
+                await processUploadedArtefact(result);
+            } catch (e) {
+                console.warn('processUploadedArtefact after upload failed', e);
+            }
+            return result;
+        };
+
+        wrapped.__acpContextWrapped = true;
+        window.uploadFile = wrapped;
+        return true;
+    }
+
+    function wrapImportSandboxFile() {
+        if (typeof window.importSandboxFile !== 'function') return false;
+        if (window.importSandboxFile.__acpContextWrapped) return true;
+
+        const originalImportSandboxFile = window.importSandboxFile;
+
+        const wrapped = async function(...args) {
+            const result = await originalImportSandboxFile.apply(this, args);
+            try {
+                await processUploadedArtefact(result);
+            } catch (e) {
+                console.warn('processUploadedArtefact after sandbox import failed', e);
+            }
+            return result;
+        };
+
+        wrapped.__acpContextWrapped = true;
+        window.importSandboxFile = wrapped;
+        return true;
+    }
+
+    function install() {
+        wrapUploadFile();
+        wrapImportSandboxFile();
+    }
+
+    install();
+    setTimeout(install, 500);
+    setTimeout(install, 1500);
+})();
+</script>
+
+</body>
+</html>

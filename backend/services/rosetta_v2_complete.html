@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROSETTA • Hyperfocus</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #fafaf9; --bg-secondary: #f5f5f4; --bg-tertiary: #e7e5e4; --bg-terminal: #1c1917;
+            --text-primary: #1c1917; --text-secondary: #57534e; --text-tertiary: #a8a29e; --text-inverse: #fafaf9;
+            --accent: #2563eb; --accent-hover: #1d4ed8; --accent-subtle: #dbeafe;
+            --border: #e7e5e4; --success: #16a34a; --warning: #f59e0b; --error: #dc2626;
+            --color-deepseek: #6366f1; --color-claude: #d97706; --color-qwen: #10b981;
+            --font-sans: 'IBM Plex Sans', -apple-system, sans-serif;
+            --font-mono: 'IBM Plex Mono', monospace;
+            --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px;
+            --transition-fast: 150ms ease; --shadow-sm: 0 1px 2px rgba(0,0,0,0.04); --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; font-family: var(--font-sans); font-size: 14px; line-height: 1.5; color: var(--text-primary); background: var(--bg-primary); -webkit-font-smoothing: antialiased; }
+        
+        .app { display: grid; grid-template-columns: 1fr 1fr 320px; grid-template-rows: 48px 1fr; grid-template-areas: "header header header" "chat terminal artefacts"; height: 100vh; overflow: hidden; }
+        
+        /* Header */
+        .header { grid-area: header; display: flex; align-items: center; justify-content: space-between; padding: 0 var(--space-md); background: var(--bg-primary); border-bottom: 1px solid var(--border); }
+        .logo { display: flex; align-items: center; gap: var(--space-sm); font-weight: 600; font-size: 15px; }
+        .logo-icon { width: 24px; height: 24px; background: linear-gradient(135deg, var(--accent), #7c3aed); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; }
+        .header-center { display: flex; align-items: center; gap: var(--space-md); }
+        
+        .model-selector { display: flex; gap: 2px; background: var(--bg-secondary); padding: 3px; border-radius: 8px; }
+        .model-option { padding: 5px 10px; border: none; background: transparent; border-radius: 5px; font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all var(--transition-fast); }
+        .model-option:hover { background: var(--bg-tertiary); }
+        .model-option.active { background: white; box-shadow: var(--shadow-sm); }
+        .model-option .dot { width: 6px; height: 6px; border-radius: 50%; }
+        .model-option[data-model="deepseek"] .dot { background: var(--color-deepseek); }
+        .model-option[data-model="claude"] .dot { background: var(--color-claude); }
+        .model-option[data-model="qwen"] .dot { background: var(--color-qwen); }
+        
+        .feature-toggles { display: flex; gap: var(--space-sm); }
+        .feature-toggle { display: flex; align-items: center; gap: 4px; padding: 5px 8px; background: var(--bg-secondary); border: 1px solid transparent; border-radius: 5px; font-size: 11px; cursor: pointer; color: var(--text-secondary); transition: all var(--transition-fast); }
+        .feature-toggle:hover { background: var(--bg-tertiary); }
+        .feature-toggle.active { background: var(--accent-subtle); border-color: var(--accent); color: var(--accent); }
+        
+        .header-status { display: flex; align-items: center; gap: var(--space-md); }
+        .gpu-control { display: flex; align-items: center; gap: 6px; padding: 5px 10px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; font-size: 11px; cursor: pointer; }
+        .gpu-control:hover { background: var(--bg-tertiary); }
+        .gpu-control.running { background: #dcfce7; border-color: var(--success); color: var(--success); }
+        .gpu-indicator { width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+        .status-dot.disconnected { background: var(--error); }
+        
+        /* Chat */
+        .chat-panel { grid-area: chat; display: flex; flex-direction: column; background: var(--bg-primary); border-right: 1px solid var(--border); min-height: 0; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-md); min-height: 0; }
+        .message { max-width: 90%; padding: var(--space-md); border-radius: 12px; animation: fadeIn 0.2s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .message.user { align-self: flex-end; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
+        .message.assistant { align-self: flex-start; background: var(--bg-secondary); border-bottom-left-radius: 4px; }
+        .message .model-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-bottom: 6px; background: rgba(0,0,0,0.05); }
+        .message-content { white-space: pre-wrap; word-break: break-word; }
+        .message-content code { font-family: var(--font-mono); font-size: 12px; background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; }
+        .message.user .message-content code { background: rgba(255,255,255,0.2); }
+        .message-content pre { background: var(--bg-terminal); color: var(--text-inverse); padding: var(--space-md); border-radius: 8px; overflow-x: auto; margin: var(--space-sm) 0; }
+        .message-content pre code { background: transparent; padding: 0; color: inherit; }
+        .tool-indicator { display: flex; align-items: center; gap: var(--space-sm); padding: 6px 10px; background: var(--accent-subtle); border-radius: 6px; font-size: 11px; color: var(--accent); margin: var(--space-sm) 0; }
+        .message-attachments { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+        .message-attachment { display: flex; align-items: center; gap: 4px; padding: 3px 6px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 11px; }
+        .message.user .message-attachment { background: rgba(255,255,255,0.2); }
+        .message-actions { display: flex; gap: var(--space-sm); margin-top: var(--space-sm); opacity: 0; transition: opacity var(--transition-fast); }
+        .message:hover .message-actions { opacity: 1; }
+        .message-action { font-size: 11px; color: var(--text-tertiary); background: none; border: none; cursor: pointer; padding: 2px 5px; border-radius: 3px; }
+        .message-action:hover { background: var(--bg-tertiary); color: var(--text-secondary); }
+        .message.user .message-action { color: rgba(255,255,255,0.7); }
+        .message.user .message-action:hover { background: rgba(255,255,255,0.2); color: white; }
+        
+        /* Chat Input */
+        .chat-input-container { padding: var(--space-md); border-top: 1px solid var(--border); background: var(--bg-primary); }
+        .context-bar { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-bottom: var(--space-sm); }
+        .context-item { display: flex; align-items: center; gap: 3px; padding: 3px 6px; background: var(--bg-secondary); border-radius: 4px; font-size: 10px; color: var(--text-secondary); }
+        .context-item.active { background: var(--accent-subtle); color: var(--accent); }
+        .context-item .remove { cursor: pointer; margin-left: 3px; opacity: 0.5; }
+        .context-item .remove:hover { opacity: 1; }
+        .pending-attachments { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+        .pending-attachment { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: var(--accent-subtle); border-radius: 6px; font-size: 11px; color: var(--accent); }
+        .pending-attachment-remove { background: none; border: none; cursor: pointer; color: var(--accent); font-size: 14px; padding: 0; margin-left: 4px; }
+        .chat-input-wrapper { display: flex; gap: var(--space-sm); align-items: flex-end; }
+        .chat-upload { width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-primary); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .chat-upload:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-subtle); }
+        .chat-upload input { display: none; }
+        .chat-input { flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 14px; resize: none; min-height: 36px; max-height: 150px; line-height: 1.4; }
+        .chat-input:focus { outline: none; border-color: var(--accent); }
+        .chat-send { width: 36px; height: 36px; border: none; border-radius: 8px; background: var(--accent); color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .chat-send:hover { background: var(--accent-hover); }
+        .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* Terminal */
+        .terminal-panel { grid-area: terminal; display: flex; flex-direction: column; background: var(--bg-terminal); border-right: 1px solid var(--border); min-height: 0; }
+        .terminal-header { display: flex; align-items: center; justify-content: space-between; padding: 6px var(--space-md); background: #292524; border-bottom: 1px solid #3f3f46; }
+        .terminal-title { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); display: flex; align-items: center; gap: var(--space-sm); }
+        .terminal-llm-badge { font-size: 9px; padding: 2px 5px; background: var(--accent); color: white; border-radius: 3px; }
+        .terminal-actions { display: flex; gap: 4px; }
+        .terminal-btn { width: 10px; height: 10px; border-radius: 50%; border: none; cursor: pointer; }
+        .terminal-btn.close { background: #ef4444; }
+        .terminal-btn.minimize { background: #eab308; }
+        .terminal-btn.maximize { background: #22c55e; }
+        .terminal-content { flex: 1; padding: var(--space-md); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; color: #e7e5e4; overflow-y: auto; white-space: pre-wrap; word-break: break-all; min-height: 0; }
+        .terminal-content .prompt { color: #22c55e; }
+        .terminal-content .output { color: #a8a29e; }
+        .terminal-content .error { color: #ef4444; }
+        .terminal-content .llm-command { color: var(--accent); background: rgba(37,99,235,0.15); padding: 1px 3px; border-radius: 2px; }
+        .terminal-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-tertiary); text-align: center; padding: var(--space-xl); }
+        .terminal-placeholder-icon { font-size: 28px; margin-bottom: var(--space-md); opacity: 0.5; }
+        .terminal-start-btn { margin-top: var(--space-md); padding: 6px 12px; background: #3f3f46; border: none; border-radius: 5px; color: var(--text-inverse); font-family: var(--font-mono); font-size: 11px; cursor: pointer; }
+        .terminal-start-btn:hover { background: #52525b; }
+        .terminal-input-line { display: flex; align-items: center; gap: var(--space-sm); padding: 6px 0; }
+        .terminal-input { flex: 1; background: transparent; border: none; font-family: var(--font-mono); font-size: 12px; color: #fafaf9; outline: none; }
+        
+        /* Artefacts */
+        .artefacts-panel { grid-area: artefacts; display: flex; flex-direction: column; background: var(--bg-secondary); min-height: 0; }
+        .artefacts-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-md); border-bottom: 1px solid var(--border); }
+        .artefacts-title { font-weight: 600; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+        .artefacts-upload-btn { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; background: none; border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); cursor: pointer; font-size: 14px; }
+        .artefacts-upload-btn:hover { background: var(--accent); border-color: var(--accent); color: white; }
+        .artefacts-count { font-size: 11px; color: var(--text-tertiary); background: var(--bg-tertiary); padding: 2px 6px; border-radius: 8px; }
+        .artefacts-filters { display: flex; gap: 2px; padding: var(--space-sm) var(--space-md); background: var(--bg-tertiary); border-bottom: 1px solid var(--border); }
+        .artefacts-filter { flex: 1; padding: 5px 8px; border: none; background: transparent; color: var(--text-secondary); font-size: 11px; font-weight: 500; cursor: pointer; border-radius: 4px; }
+        .artefacts-filter:hover { background: var(--bg-secondary); }
+        .artefacts-filter.active { background: var(--bg-primary); color: var(--accent); box-shadow: var(--shadow-sm); }
+        .artefacts-list { flex: 1; overflow-y: auto; padding: var(--space-sm); min-height: 0; }
+        .artefact-item { display: flex; align-items: center; gap: var(--space-sm); padding: 6px var(--space-sm); border-radius: 6px; cursor: pointer; }
+        .artefact-item:hover { background: var(--bg-tertiary); }
+        .artefact-item.in-context { border-left: 3px solid var(--accent); }
+        .artefact-icon { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: var(--bg-primary); border-radius: 5px; font-size: 13px; }
+        .artefact-info { flex: 1; min-width: 0; }
+        .artefact-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .artefact-meta { font-size: 10px; color: var(--text-tertiary); }
+        .artefact-actions { display: flex; gap: 2px; opacity: 0; }
+        .artefact-item:hover .artefact-actions { opacity: 1; }
+        .artefact-action { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 4px; color: var(--text-secondary); cursor: pointer; font-size: 12px; }
+        .artefact-action:hover { background: var(--bg-primary); color: var(--accent); }
+        .artefact-action.active { background: var(--accent-subtle); color: var(--accent); }
+        .artefacts-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 150px; color: var(--text-tertiary); text-align: center; padding: var(--space-lg); }
+        .artefacts-empty-icon { font-size: 28px; margin-bottom: var(--space-sm); opacity: 0.5; }
+        
+        /* Modals */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.2s ease; }
+        .modal-overlay.visible { opacity: 1; visibility: visible; }
+        .modal { width: 90%; max-width: 500px; max-height: 80vh; background: var(--bg-primary); border-radius: 12px; box-shadow: var(--shadow-md); display: flex; flex-direction: column; transform: scale(0.95); transition: transform 0.2s ease; }
+        .modal-overlay.visible .modal { transform: scale(1); }
+        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-md); border-bottom: 1px solid var(--border); }
+        .modal-title { font-weight: 600; }
+        .modal-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 5px; cursor: pointer; color: var(--text-secondary); font-size: 16px; }
+        .modal-close:hover { background: var(--bg-secondary); }
+        .modal-content { flex: 1; overflow: auto; padding: var(--space-md); }
+        .preview-content { font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+        .settings-section { margin-bottom: var(--space-lg); }
+        .settings-section-title { font-weight: 600; font-size: 13px; margin-bottom: var(--space-sm); color: var(--text-secondary); }
+        .settings-row { display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm) 0; border-bottom: 1px solid var(--border); }
+        .settings-label { display: flex; flex-direction: column; }
+        .settings-label small { color: var(--text-tertiary); font-size: 10px; }
+        .settings-input { padding: 6px 10px; border: 1px solid var(--border); border-radius: 5px; font-size: 12px; width: 180px; }
+        
+        /* Toast */
+        .toast-container { position: fixed; top: var(--space-lg); right: var(--space-lg); z-index: 1100; display: flex; flex-direction: column; gap: var(--space-sm); }
+        .toast { background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; padding: var(--space-sm) var(--space-md); box-shadow: var(--shadow-md); display: flex; align-items: center; gap: var(--space-sm); animation: slideIn 0.2s ease; max-width: 300px; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        .toast.success { border-left: 3px solid var(--success); }
+        .toast.error { border-left: 3px solid var(--error); }
+        .toast.warning { border-left: 3px solid var(--warning); }
+        .toast.info { border-left: 3px solid var(--accent); }
+        .toast-message { font-size: 12px; }
+        
+        /* Drop overlay */
+        .drop-overlay { position: fixed; inset: 0; background: rgba(37,99,235,0.1); border: 3px dashed var(--accent); display: flex; align-items: center; justify-content: center; z-index: 999; opacity: 0; visibility: hidden; }
+        .drop-overlay.visible { opacity: 1; visibility: visible; }
+        .drop-overlay-content { background: var(--bg-primary); padding: var(--space-xl); border-radius: 16px; text-align: center; }
+        .drop-overlay-icon { font-size: 40px; margin-bottom: var(--space-md); }
+        .drop-overlay-text { font-size: 16px; font-weight: 500; color: var(--accent); }
+        
+        /* Upload progress */
+        .upload-progress { position: fixed; bottom: var(--space-lg); right: var(--space-lg); background: var(--bg-primary); border: 1px solid var(--border); border-radius: 10px; padding: var(--space-md); box-shadow: var(--shadow-md); min-width: 220px; z-index: 100; display: none; }
+        .upload-progress.visible { display: block; }
+        .upload-progress-bar { height: 4px; background: var(--bg-tertiary); border-radius: 2px; margin-top: var(--space-sm); overflow: hidden; }
+        .upload-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.2s; }
+        
+        /* Loading */
+        .loading-dots { display: inline-flex; gap: 4px; }
+        .loading-dots span { width: 6px; height: 6px; background: var(--text-tertiary); border-radius: 50%; animation: bounce 1.4s infinite ease-in-out both; }
+        .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+        .terminal-content::-webkit-scrollbar-thumb { background: #3f3f46; }
+        
+        /* Responsive */
+        @media (max-width: 1200px) { .feature-toggles { display: none; } }
+        @media (max-width: 1024px) { .app { grid-template-columns: 1fr 1fr; grid-template-areas: "header header" "chat terminal"; } .artefacts-panel { display: none; } }
+        @media (max-width: 768px) { .app { grid-template-columns: 1fr; grid-template-areas: "header" "chat"; } .terminal-panel, .model-selector { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="logo"><div class="logo-icon">🔮</div><span>ROSETTA</span></div>
+            <div class="header-center">
+                <div class="model-selector" id="modelSelector">
+                    <button class="model-option active" data-model="deepseek"><span class="dot"></span>DeepSeek</button>
+                    <button class="model-option" data-model="claude"><span class="dot"></span>Claude</button>
+                    <button class="model-option" data-model="qwen"><span class="dot"></span>Qwen3</button>
+                </div>
+                <div class="feature-toggles">
+                    <button class="feature-toggle" id="toggleWeb" title="Web search">🌐 Web</button>
+                    <button class="feature-toggle" id="toggleOCR" title="OCR">📷 OCR</button>
+                    <button class="feature-toggle active" id="toggleTerminal" title="Terminal access">⌨️ Term</button>
+                </div>
+            </div>
+            <div class="header-status">
+                <button class="gpu-control running" id="gpuControl"><span class="gpu-indicator"></span>GPU</button>
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText" style="font-size:11px;color:var(--text-tertiary)">Connecting...</span>
+            </div>
+        </header>
+
+        <div class="chat-panel">
+            <div class="chat-messages" id="chatMessages">
+                <div class="message assistant">
+                    <div class="model-badge"><span class="dot" style="background:var(--color-deepseek)"></span>DeepSeek</div>
+                    <div class="message-content">Bienvenue sur ROSETTA ! 🔮
+
+Modèles disponibles : DeepSeek (local), Claude (API), Qwen3 (local)
+Fonctionnalités : 🌐 Web | 📷 OCR | ⌨️ Terminal | 📎 Artefacts
+
+Comment puis-je vous aider ?</div>
+                </div>
+            </div>
+            <div class="chat-input-container">
+                <div class="context-bar" id="contextBar"></div>
+                <div class="pending-attachments" id="pendingAttachments"></div>
+                <div class="chat-input-wrapper">
+                    <label class="chat-upload"><input type="file" id="fileInput" multiple><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></label>
+                    <textarea class="chat-input" id="chatInput" placeholder="Message ROSETTA..." rows="1"></textarea>
+                    <button class="chat-send" id="chatSend" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13"/></svg></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="terminal-panel">
+            <div class="terminal-header">
+                <span class="terminal-title">Terminal <span class="terminal-llm-badge" id="llmBadge">LLM</span></span>
+                <div class="terminal-actions"><button class="terminal-btn close"></button><button class="terminal-btn minimize"></button><button class="terminal-btn maximize"></button></div>
+            </div>
+            <div class="terminal-content" id="terminalContent">
+                <div class="terminal-placeholder" id="terminalPlaceholder">
+                    <div class="terminal-placeholder-icon">⌨️</div>
+                    <div>Terminal Session</div>
+                    <button class="terminal-start-btn" id="terminalStart">Start Session</button>
+                </div>
+                <div id="terminalOutput" style="display:none"></div>
+                <div class="terminal-input-line" id="terminalInputLine" style="display:none">
+                    <span class="prompt">$</span>
+                    <input type="text" class="terminal-input" id="terminalInput">
+                </div>
+            </div>
+        </div>
+
+        <div class="artefacts-panel">
+            <div class="artefacts-header">
+                <span class="artefacts-title">Artefacts</span>
+                <div style="display:flex;align-items:center;gap:var(--space-sm)">
+                    <label class="artefacts-upload-btn"><input type="file" id="artefactUpload" multiple style="display:none">+</label>
+                    <span class="artefacts-count" id="artefactsCount">0</span>
+                </div>
+            </div>
+            <div class="artefacts-filters" id="artefactsFilters">
+                <button class="artefacts-filter active" data-filter="all">All</button>
+                <button class="artefacts-filter" data-filter="chat">AI</button>
+                <button class="artefacts-filter" data-filter="upload">User</button>
+            </div>
+            <div class="artefacts-list" id="artefactsList"></div>
+        </div>
+    </div>
+
+    <div class="drop-overlay" id="dropOverlay"><div class="drop-overlay-content"><div class="drop-overlay-icon">📎</div><div class="drop-overlay-text">Drop files to upload</div></div></div>
+    <div class="upload-progress" id="uploadProgress"><div id="uploadFileName">Uploading...</div><div class="upload-progress-bar"><div class="upload-progress-fill" id="uploadFill"></div></div></div>
+    <div class="modal-overlay" id="previewModal"><div class="modal" style="max-width:800px"><div class="modal-header"><span class="modal-title" id="previewTitle">Preview</span><button class="modal-close" id="previewClose">×</button></div><div class="modal-content"><pre class="preview-content" id="previewContent"></pre></div></div></div>
+    <div class="modal-overlay" id="gpuModal"><div class="modal" style="max-width:380px"><div class="modal-header"><span class="modal-title">🖥️ GPU Control</span><button class="modal-close" id="gpuModalClose">×</button></div><div class="modal-content" style="text-align:center;padding:var(--space-xl)"><div style="font-size:40px;margin-bottom:var(--space-md)">🟢</div><div style="font-weight:600">GPU Server Running</div><div style="color:var(--text-secondary);font-size:12px;margin-bottom:var(--space-lg)">L4-1-24G • rosetta.chat</div><div style="display:flex;gap:var(--space-md);justify-content:center"><button id="gpuPause" style="padding:10px 20px;background:var(--warning);color:white;border:none;border-radius:6px;cursor:pointer">⏸️ Pause</button><button id="gpuStop" style="padding:10px 20px;background:var(--error);color:white;border:none;border-radius:6px;cursor:pointer">⏹️ Stop</button></div></div></div></div>
+    <div class="modal-overlay" id="settingsModal"><div class="modal"><div class="modal-header"><span class="modal-title">⚙️ Settings</span><button class="modal-close" id="settingsClose">×</button></div><div class="modal-content"><div class="settings-section"><div class="settings-section-title">LLM Configuration</div><div class="settings-row"><div class="settings-label"><span>Claude API</span><small>✅ Configured server-side</small></div><span style="color:var(--success)">Active</span></div><div class="settings-row"><div class="settings-label"><span>DeepSeek</span><small>Local vLLM (port 8000)</small></div><span style="color:var(--success)">Active</span></div><div class="settings-row"><div class="settings-label"><span>Qwen3</span><small>Local vLLM (port 8001)</small></div><span style="color:var(--text-tertiary)">Not configured</span></div></div><div class="settings-section"><div class="settings-section-title">Context</div><div class="settings-row"><div class="settings-label"><span>Shared Context</span><small>Context preserved across model switches</small></div><span style="color:var(--success)">✓ Enabled</span></div></div></div></div></div>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+const CONFIG = {
+    apiBase: window.location.origin + '/api',
+    apiKey: 'HYPER_KQ57QFnPXwRhjaZCL2Qs2fzvTa9gmHBe',
+    wsBase: (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host,
+    models: {
+        deepseek: { name: 'DeepSeek', endpoint: '/chat/completions', color: '#6366f1', local: true },
+        claude: { name: 'Claude', endpoint: '/chat/claude', color: '#d97706', local: false },  // API key server-side
+        qwen: { name: 'Qwen3', endpoint: '/chat/qwen', color: '#10b981', local: true }
+    }
+};
+
+// Note: Claude API key is now managed server-side for security
+// The key sk-ant-api03-... is configured in the backend llm_router.py
+
+const state = {
+    sessionId: null, terminalWs: null, isStreaming: false, artefacts: [], pendingFiles: [],
+    currentModel: 'deepseek', features: { web: false, ocr: false, terminal: true }, contextArtefacts: []
+};
+
+// Toast
+const toast = {
+    show(msg, type = 'info') {
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.innerHTML = `<span class="toast-message">${msg}</span>`;
+        document.getElementById('toastContainer').appendChild(el);
+        setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3000);
+    }
+};
+
+// API
+const api = {
+    headers: () => ({ 'Content-Type': 'application/json', 'X-API-Key': CONFIG.apiKey }),
+    async fetch(endpoint, opts = {}) {
+        const r = await fetch(CONFIG.apiBase + endpoint, { ...opts, headers: { ...this.headers(), ...opts.headers } });
+        if (!r.ok) throw new Error(`API ${r.status}`);
+        return r.json();
+    },
+    checkHealth: async () => { try { return (await api.fetch('/health')).status === 'healthy'; } catch { return false; } },
+    sendMessage: (content) => api.fetch(CONFIG.models[state.currentModel].endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ messages: [{ role: 'user', content }], session_id: state.sessionId, model: state.currentModel, features: state.features, context: state.contextArtefacts.map(a => a.id) })
+    }),
+    getArtefacts: (src) => api.fetch('/artefacts' + (src ? `?source=${src}` : '')),
+    uploadArtefact: (file, onProgress) => new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest(), fd = new FormData();
+        fd.append('file', file);
+        xhr.upload.onprogress = e => e.lengthComputable && onProgress && onProgress(Math.round(e.loaded / e.total * 100));
+        xhr.onload = () => xhr.status < 300 ? resolve(JSON.parse(xhr.responseText)) : reject(new Error(xhr.status));
+        xhr.onerror = () => reject(new Error('Upload failed'));
+        xhr.open('POST', CONFIG.apiBase + '/artefacts/upload');
+        xhr.setRequestHeader('X-API-Key', CONFIG.apiKey);
+        xhr.send(fd);
+    }),
+    previewArtefact: async (id) => { const r = await fetch(CONFIG.apiBase + `/artefacts/${id}/preview`, { headers: api.headers() }); return r.text(); },
+    createTerminal: () => api.fetch('/terminal/sessions', { method: 'POST' })
+};
+
+// UI Helpers
+const $ = id => document.getElementById(id);
+const esc = t => { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; };
+const fileIcon = ext => ({ md: '📝', txt: '📄', py: '🐍', js: '📜', json: '📋', pdf: '📕', png: '🖼', jpg: '🖼', csv: '📊' }[ext] || '📄');
+const formatSize = b => b < 1024 ? b + 'B' : b < 1048576 ? (b/1024).toFixed(1) + 'KB' : (b/1048576).toFixed(1) + 'MB';
+const formatDate = d => { const diff = Date.now() - new Date(d); return diff < 60000 ? 'now' : diff < 3600000 ? Math.floor(diff/60000) + 'm' : diff < 86400000 ? Math.floor(diff/3600000) + 'h' : new Date(d).toLocaleDateString(); };
+
+// UI
+const ui = {
+    setStatus(ok) { $('statusDot').classList.toggle('disconnected', !ok); $('statusText').textContent = ok ? 'Connected' : 'Offline'; },
+    setModel(m) { state.currentModel = m; document.querySelectorAll('.model-option').forEach(b => b.classList.toggle('active', b.dataset.model === m)); this.updateContext(); },
+    toggleFeature(f) { state.features[f] = !state.features[f]; $('toggle' + f.charAt(0).toUpperCase() + f.slice(1)).classList.toggle('active'); if (f === 'terminal') $('llmBadge').style.display = state.features.terminal ? '' : 'none'; this.updateContext(); },
+    updateContext() {
+        const items = [`<div class="context-item active"><span style="color:${CONFIG.models[state.currentModel].color}">●</span> ${CONFIG.models[state.currentModel].name}</div>`];
+        if (state.features.web) items.push('<div class="context-item active">🌐</div>');
+        if (state.features.ocr) items.push('<div class="context-item active">📷</div>');
+        if (state.features.terminal) items.push('<div class="context-item active">⌨️</div>');
+        state.contextArtefacts.forEach(a => items.push(`<div class="context-item">📄 ${a.filename.slice(0,12)}${a.filename.length>12?'...':''} <span class="remove" onclick="ui.removeContext('${a.id}')">×</span></div>`));
+        $('contextBar').innerHTML = items.join('');
+    },
+    addContext(a) { if (!state.contextArtefacts.find(x => x.id === a.id)) { state.contextArtefacts.push(a); this.updateContext(); this.renderArtefacts(state.artefacts); toast.show('Added to context'); } },
+    removeContext(id) { state.contextArtefacts = state.contextArtefacts.filter(a => a.id !== id); this.updateContext(); this.renderArtefacts(state.artefacts); },
+    updatePending() {
+        $('pendingAttachments').innerHTML = state.pendingFiles.map((f, i) => `<div class="pending-attachment">${fileIcon(f.name.split('.').pop())} ${f.name.slice(0,15)} <button class="pending-attachment-remove" onclick="state.pendingFiles.splice(${i},1);ui.updatePending()">×</button></div>`).join('');
+        $('chatSend').disabled = !$('chatInput').value.trim() && !state.pendingFiles.length;
+    },
+    addMessage(role, content, opts = {}) {
+        const m = document.createElement('div');
+        m.className = `message ${role}`;
+        let badge = '', tools = '', attach = '';
+        if (role === 'assistant' && opts.model) badge = `<div class="model-badge"><span class="dot" style="background:${CONFIG.models[opts.model]?.color||'#888'}"></span>${CONFIG.models[opts.model]?.name||opts.model}</div>`;
+        if (opts.tools?.length) tools = opts.tools.map(t => `<div class="tool-indicator">${t.icon||'🔧'} ${t.name}</div>`).join('');
+        if (opts.attachments?.length) attach = `<div class="message-attachments">${opts.attachments.map(a => `<div class="message-attachment">${fileIcon(a.type||a.file_type)} ${a.name||a.filename}</div>`).join('')}</div>`;
+        m.innerHTML = `${badge}${attach}${tools}<div class="message-content">${esc(content).replace(/```(\w*)\n([\s\S]*?)```/g,'<pre><code>$2</code></pre>').replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')}</div><div class="message-actions"><button class="message-action" onclick="navigator.clipboard.writeText(this.closest('.message').querySelector('.message-content').textContent);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)">Copy</button>${role==='assistant'?'<button class="message-action" onclick="saveArtefact(this)">Save</button>':''}</div>`;
+        $('chatMessages').appendChild(m);
+        $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+    },
+    addLoading() {
+        const m = document.createElement('div');
+        m.className = 'message assistant'; m.id = 'loading';
+        m.innerHTML = `<div class="model-badge"><span class="dot" style="background:${CONFIG.models[state.currentModel].color}"></span>${CONFIG.models[state.currentModel].name}</div><div class="loading-dots"><span></span><span></span><span></span></div>`;
+        $('chatMessages').appendChild(m);
+        $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+    },
+    removeLoading() { $('loading')?.remove(); },
+    renderArtefacts(list) {
+        state.artefacts = list;
+        $('artefactsCount').textContent = list.length;
+        if (!list.length) { $('artefactsList').innerHTML = '<div class="artefacts-empty"><div class="artefacts-empty-icon">📁</div><div>No artefacts</div></div>'; return; }
+        $('artefactsList').innerHTML = list.map(a => {
+            const ctx = state.contextArtefacts.find(c => c.id === a.id);
+            return `<div class="artefact-item ${ctx?'in-context':''}" data-id="${a.id}"><div class="artefact-icon">${fileIcon(a.file_type)}</div><div class="artefact-info"><div class="artefact-name">${esc(a.filename)}</div><div class="artefact-meta">${formatSize(a.file_size)} · ${formatDate(a.created_at)}</div></div><div class="artefact-actions"><button class="artefact-action ${ctx?'active':''}" onclick="ui.toggleContext('${a.id}')">${ctx?'✓':'+'}</button><button class="artefact-action" onclick="previewArtefact('${a.id}','${esc(a.filename)}')">👁</button><button class="artefact-action" onclick="window.open(CONFIG.apiBase+'/artefacts/${a.id}/download')">⬇</button></div></div>`;
+        }).join('');
+    },
+    toggleContext(id) { const a = state.artefacts.find(x => x.id === id); if (!a) return; state.contextArtefacts.find(x => x.id === id) ? this.removeContext(id) : this.addContext(a); },
+    showTerminal() { $('terminalPlaceholder').style.display = 'none'; $('terminalOutput').style.display = 'block'; $('terminalInputLine').style.display = 'flex'; $('terminalInput').focus(); },
+    appendTerminal(text, cls = '') { const s = document.createElement('span'); if (cls) s.className = cls; s.textContent = text; $('terminalOutput').appendChild(s); $('terminalContent').scrollTop = $('terminalContent').scrollHeight; },
+    showUpload(name) { $('uploadFileName').textContent = name; $('uploadFill').style.width = '0%'; $('uploadProgress').classList.add('visible'); },
+    updateUpload(pct) { $('uploadFill').style.width = pct + '%'; },
+    hideUpload() { $('uploadProgress').classList.remove('visible'); }
+};
+
+// Actions
+async function loadArtefacts() {
+    try {
+        const filter = document.querySelector('.artefacts-filter.active')?.dataset.filter || 'all';
+        const data = await api.getArtefacts(filter === 'all' ? null : filter);
+        ui.renderArtefacts(data.artefacts || []);
+    } catch (e) { console.error(e); }
+}
+
+async function uploadFile(file) {
+    ui.showUpload(file.name);
+    try {
+        await api.uploadArtefact(file, pct => ui.updateUpload(pct));
+        ui.updateUpload(100);
+        setTimeout(() => { ui.hideUpload(); loadArtefacts(); toast.show('Uploaded ' + file.name, 'success'); }, 500);
+    } catch (e) { ui.hideUpload(); toast.show('Upload failed', 'error'); }
+}
+
+async function sendMessage() {
+    const content = $('chatInput').value.trim();
+    if (!content && !state.pendingFiles.length) return;
+    if (state.isStreaming) return;
+    
+    state.isStreaming = true;
+    $('chatSend').disabled = true;
+    $('chatInput').value = '';
+    $('chatInput').style.height = 'auto';
+    
+    const attachments = [...state.pendingFiles];
+    state.pendingFiles = [];
+    ui.updatePending();
+    
+    for (const f of attachments) await uploadFile(f);
+    
+    ui.addMessage('user', content || 'Uploaded files', { attachments: attachments.map(f => ({ name: f.name, type: f.name.split('.').pop() })) });
+    ui.addLoading();
+    
+    try {
+        const r = await api.sendMessage(content);
+        state.sessionId = r.session_id;
+        ui.removeLoading();
+        ui.addMessage('assistant', r.message.content, { model: state.currentModel, tools: r.tools_used });
+    } catch (e) {
+        ui.removeLoading();
+        ui.addMessage('assistant', 'Error: ' + e.message, { model: state.currentModel });
+        toast.show('Failed to get response', 'error');
+    }
+    
+    state.isStreaming = false;
+    $('chatSend').disabled = false;
+    $('chatInput').focus();
+    loadArtefacts();
+}
+
+async function startTerminal() {
+    try {
+        const s = await api.createTerminal();
+        const ws = new WebSocket(`${CONFIG.wsBase}/api/terminal/sessions/${s.id}/ws?token=${CONFIG.apiKey}`);
+        ws.onopen = () => { ui.showTerminal(); ui.appendTerminal('Session started\n', 'output'); toast.show('Terminal started', 'success'); };
+        ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'output') ui.appendTerminal(m.data); };
+        ws.onclose = () => ui.appendTerminal('\n[Closed]\n', 'error');
+        state.terminalWs = ws;
+    } catch (e) { toast.show('Terminal failed', 'error'); }
+}
+
+async function previewArtefact(id, name) {
+    try {
+        const content = await api.previewArtefact(id);
+        $('previewTitle').textContent = name;
+        $('previewContent').textContent = content;
+        $('previewModal').classList.add('visible');
+    } catch { toast.show('Preview unavailable', 'warning'); }
+}
+
+async function saveArtefact(btn) {
+    const content = btn.closest('.message').querySelector('.message-content').textContent;
+    try {
+        await api.fetch('/artefacts', { method: 'POST', body: JSON.stringify({ filename: `note-${Date.now()}.md`, content }) });
+        btn.textContent = 'Saved!';
+        setTimeout(() => btn.textContent = 'Save', 1500);
+        loadArtefacts();
+        toast.show('Saved as artefact', 'success');
+    } catch { toast.show('Save failed', 'error'); }
+}
+
+// Drag & Drop
+let dragCounter = 0;
+document.addEventListener('dragenter', e => { e.preventDefault(); dragCounter++; $('dropOverlay').classList.add('visible'); });
+document.addEventListener('dragleave', e => { e.preventDefault(); if (--dragCounter === 0) $('dropOverlay').classList.remove('visible'); });
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', async e => {
+    e.preventDefault(); dragCounter = 0; $('dropOverlay').classList.remove('visible');
+    const files = [...e.dataTransfer.files];
+    if (document.querySelector('.chat-panel').contains(e.target)) { state.pendingFiles.push(...files); ui.updatePending(); }
+    else for (const f of files) await uploadFile(f);
+});
+
+// Init
+(async function init() {
+    const ok = await api.checkHealth();
+    ui.setStatus(ok);
+    ui.updateContext();
+    loadArtefacts();
+    
+    // Model selector
+    $('modelSelector').onclick = e => { const b = e.target.closest('.model-option'); if (b) ui.setModel(b.dataset.model); };
+    
+    // Feature toggles
+    $('toggleWeb').onclick = () => ui.toggleFeature('web');
+    $('toggleOCR').onclick = () => ui.toggleFeature('ocr');
+    $('toggleTerminal').onclick = () => ui.toggleFeature('terminal');
+    
+    // Chat
+    $('chatInput').oninput = () => { $('chatInput').style.height = 'auto'; $('chatInput').style.height = Math.min($('chatInput').scrollHeight, 150) + 'px'; $('chatSend').disabled = !$('chatInput').value.trim() && !state.pendingFiles.length; };
+    $('chatInput').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
+    $('chatSend').onclick = sendMessage;
+    $('fileInput').onchange = e => { state.pendingFiles.push(...e.target.files); ui.updatePending(); e.target.value = ''; };
+    
+    // Artefacts
+    $('artefactUpload').onchange = async e => { for (const f of e.target.files) await uploadFile(f); e.target.value = ''; };
+    $('artefactsFilters').onclick = e => { const b = e.target.closest('.artefacts-filter'); if (b) { document.querySelectorAll('.artefacts-filter').forEach(x => x.classList.remove('active')); b.classList.add('active'); loadArtefacts(); } };
+    
+    // Terminal
+    $('terminalStart').onclick = startTerminal;
+    $('terminalInput').onkeydown = e => { if (e.key === 'Enter' && state.terminalWs) { const cmd = $('terminalInput').value; $('terminalInput').value = ''; ui.appendTerminal(`$ ${cmd}\n`, 'prompt'); state.terminalWs.send(JSON.stringify({ type: 'input', data: cmd + '\n' })); } };
+    
+    // GPU Control
+    $('gpuControl').onclick = () => $('gpuModal').classList.add('visible');
+    $('gpuModalClose').onclick = () => $('gpuModal').classList.remove('visible');
+    $('gpuPause').onclick = () => { toast.show('GPU pause requested', 'warning'); $('gpuModal').classList.remove('visible'); };
+    $('gpuStop').onclick = () => { toast.show('GPU stop requested', 'error'); $('gpuModal').classList.remove('visible'); };
+    
+    // Modals
+    $('previewClose').onclick = () => $('previewModal').classList.remove('visible');
+    $('previewModal').onclick = e => { if (e.target === $('previewModal')) $('previewModal').classList.remove('visible'); };
+    $('settingsClose').onclick = () => $('settingsModal').classList.remove('visible');
+    
+    // Keyboard
+    document.onkeydown = e => {
+        if (e.key === 'Escape') { $('previewModal').classList.remove('visible'); $('gpuModal').classList.remove('visible'); $('settingsModal').classList.remove('visible'); }
+        if (e.ctrlKey && e.key === ',') { e.preventDefault(); $('settingsModal').classList.add('visible'); }
+    };
+    
+    // Refresh
+    setInterval(async () => ui.setStatus(await api.checkHealth()), 30000);
+    setInterval(loadArtefacts, 60000);
+    
+    toast.show(ok ? 'ROSETTA ready' : 'Backend offline', ok ? 'success' : 'warning');
+})();
+    </script>
+</body>
+</html>

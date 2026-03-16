@@ -1,0 +1,86 @@
+version: "3.8"
+
+services:
+  # Hyperfocus Backend (Claude API only, no vLLM)
+  backend:
+    build:
+      context: /root/hyperfocus/hyperfocus
+      dockerfile: Dockerfile
+    container_name: hyperfocus-api
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DEBUG=${DEBUG:-false}
+      - API_KEY=${API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-20250514}
+      - VLLM_BASE_URL=disabled
+      - VLLM_MODEL=disabled
+      - DATABASE_URL=sqlite+aiosqlite:////data/db/hyperfocus.db
+      - ARTEFACTS_ROOT=/data/artefacts
+      - TERMINAL_ENABLED=false
+    volumes:
+      - /mnt/hyperfocus-data:/data
+      - /root/.ssh/github:/home/hyperfocus/.ssh/github:ro
+      - /root/.ssh/config:/home/hyperfocus/.ssh/config:ro
+      - /root/hyperfocus/hyperfocus/frontend:/app/frontend:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8080/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+
+  # Authelia (authentication)
+  authelia:
+    image: authelia/authelia:4
+    container_name: authelia
+    restart: unless-stopped
+    volumes:
+      - /root/hyperfocus/hyperfocus/authelia/config:/config
+    environment:
+      - TZ=Europe/Paris
+    ports:
+      - "127.0.0.1:9091:9091"
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9091/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Nginx reverse proxy (SSL + auth)
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    volumes:
+      - /root/hyperfocus/hyperfocus/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /root/hyperfocus/hyperfocus/nginx/certs:/etc/nginx/certs:ro
+      - /root/hyperfocus/hyperfocus/frontend:/var/www/html:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      backend:
+        condition: service_healthy
+      authelia:
+        condition: service_healthy
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  hyperfocus_data:
+    name: hyperfocus_data
+
+networks:
+  default:
+    name: hyperfocus-network

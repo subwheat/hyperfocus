@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rosetta — Sign In</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        /* ══════════════════════════════════════════════════════════════════
+           DESIGN TOKENS (matching index.html)
+           ══════════════════════════════════════════════════════════════════ */
+        :root {
+            --bg-primary: #fafaf9;
+            --bg-secondary: #f5f5f4;
+            --bg-card: #ffffff;
+            
+            --text-primary: #1c1917;
+            --text-secondary: #57534e;
+            --text-tertiary: #a8a29e;
+            
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --accent-subtle: #dbeafe;
+            
+            --border: #e7e5e4;
+            --error: #dc2626;
+            --error-bg: #fef2f2;
+            
+            --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+            
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            
+            --transition: 200ms ease;
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           RESET & BASE
+           ══════════════════════════════════════════════════════════════════ */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: var(--font-sans);
+            font-size: 16px;
+            line-height: 1.5;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           LAYOUT
+           ══════════════════════════════════════════════════════════════════ */
+        .login-page {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           LOGO & HEADER
+           ══════════════════════════════════════════════════════════════════ */
+        .login-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, var(--accent) 0%, #3b82f6 100%);
+            border-radius: var(--radius-lg);
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .logo svg {
+            width: 32px;
+            height: 32px;
+            fill: white;
+        }
+
+        .login-title {
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            margin-bottom: 8px;
+        }
+
+        .login-subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           CARD
+           ══════════════════════════════════════════════════════════════════ */
+        .login-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            padding: 32px;
+            border: 1px solid var(--border);
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           FORM
+           ══════════════════════════════════════════════════════════════════ */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 16px;
+            font-family: var(--font-sans);
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            transition: all var(--transition);
+            outline: none;
+        }
+
+        .form-input:hover {
+            border-color: #d6d3d1;
+        }
+
+        .form-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-subtle);
+            background: var(--bg-card);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        .form-input.error {
+            border-color: var(--error);
+            background: var(--error-bg);
+        }
+
+        .form-input.error:focus {
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           BUTTON
+           ══════════════════════════════════════════════════════════════════ */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 14px 24px;
+            font-size: 16px;
+            font-weight: 500;
+            font-family: var(--font-sans);
+            color: white;
+            background: var(--accent);
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all var(--transition);
+            outline: none;
+        }
+
+        .btn:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:focus-visible {
+            box-shadow: 0 0 0 3px var(--accent-subtle);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-loading {
+            position: relative;
+            color: transparent;
+        }
+
+        .btn-loading::after {
+            content: "";
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid transparent;
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           ERROR MESSAGE
+           ══════════════════════════════════════════════════════════════════ */
+        .error-message {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: var(--error);
+            background: var(--error-bg);
+            border: 1px solid rgba(220, 38, 38, 0.2);
+            border-radius: var(--radius-sm);
+        }
+
+        .error-message.visible {
+            display: flex;
+        }
+
+        .error-message svg {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           FOOTER
+           ══════════════════════════════════════════════════════════════════ */
+        .login-footer {
+            text-align: center;
+            margin-top: 24px;
+            font-size: 13px;
+            color: var(--text-tertiary);
+        }
+
+        .login-footer a {
+            color: var(--accent);
+            text-decoration: none;
+            transition: color var(--transition);
+        }
+
+        .login-footer a:hover {
+            color: var(--accent-hover);
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           RESPONSIVE
+           ══════════════════════════════════════════════════════════════════ */
+        @media (max-width: 480px) {
+            .login-card {
+                padding: 24px;
+            }
+            
+            .login-title {
+                font-size: 24px;
+            }
+            
+            .logo {
+                width: 56px;
+                height: 56px;
+            }
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           DARK MODE (optional, follows system)
+           ══════════════════════════════════════════════════════════════════ */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-primary: #0a0a0a;
+                --bg-secondary: #171717;
+                --bg-card: #1c1c1e;
+                
+                --text-primary: #fafaf9;
+                --text-secondary: #a8a29e;
+                --text-tertiary: #6b6b6b;
+                
+                --border: #2c2c2e;
+                --error-bg: #2d1515;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-page">
+        <div class="login-container">
+            <!-- Header -->
+            <header class="login-header">
+                <div class="logo">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                </div>
+                <h1 class="login-title">Rosetta</h1>
+                <p class="login-subtitle">Sign in to your account</p>
+            </header>
+
+            <!-- Login Card -->
+            <div class="login-card">
+                <!-- Error Message -->
+                <div class="error-message" id="errorMessage">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <span id="errorText">Invalid username or password</span>
+                </div>
+
+                <!-- Form -->
+                <form id="loginForm" autocomplete="on">
+                    <div class="form-group">
+                        <label for="username" class="form-label">Username</label>
+                        <input 
+                            type="text" 
+                            id="username" 
+                            name="username"
+                            class="form-input" 
+                            placeholder="Enter your username"
+                            autocomplete="username"
+                            required
+                            autofocus
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password" class="form-label">Password</label>
+                        <input 
+                            type="password" 
+                            id="password" 
+                            name="password"
+                            class="form-input" 
+                            placeholder="Enter your password"
+                            autocomplete="current-password"
+                            required
+                        >
+                    </div>
+
+                    <button type="submit" class="btn" id="submitBtn">
+                        Sign In
+                    </button>
+                </form>
+            </div>
+
+            <!-- Footer -->
+            <footer class="login-footer">
+                <p>Protected by Rosetta Auth</p>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+        // ══════════════════════════════════════════════════════════════════
+        // LOGIN LOGIC
+        // ══════════════════════════════════════════════════════════════════
+        
+        const form = document.getElementById('loginForm');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        const submitBtn = document.getElementById('submitBtn');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+
+        // Hide error when user starts typing
+        [usernameInput, passwordInput].forEach(input => {
+            input.addEventListener('input', () => {
+                hideError();
+                input.classList.remove('error');
+            });
+        });
+
+        function showError(message) {
+            errorText.textContent = message;
+            errorMessage.classList.add('visible');
+            usernameInput.classList.add('error');
+            passwordInput.classList.add('error');
+        }
+
+        function hideError() {
+            errorMessage.classList.remove('visible');
+        }
+
+        function setLoading(loading) {
+            submitBtn.disabled = loading;
+            submitBtn.classList.toggle('btn-loading', loading);
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
+
+            if (!username || !password) {
+                showError('Please enter both username and password');
+                return;
+            }
+
+            setLoading(true);
+            hideError();
+
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password }),
+                    credentials: 'same-origin'
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    // Redirect to main app
+                    const redirectTo = new URLSearchParams(window.location.search).get('redirect') || '/';
+                    window.location.href = redirectTo;
+                } else {
+                    // Show error
+                    showError(data.detail || data.message || 'Invalid username or password');
+                    passwordInput.value = '';
+                    passwordInput.focus();
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showError('Connection error. Please try again.');
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        // Check if already logged in
+        async function checkAuth() {
+            try {
+                const response = await fetch('/auth/me', {
+                    credentials: 'same-origin'
+                });
+                
+                if (response.ok) {
+                    // Already logged in, redirect
+                    const redirectTo = new URLSearchParams(window.location.search).get('redirect') || '/';
+                    window.location.href = redirectTo;
+                }
+            } catch (e) {
+                // Not logged in, stay on page
+            }
+        }
+
+        // Run on load
+        checkAuth();
+    </script>
+</body>
+</html>
