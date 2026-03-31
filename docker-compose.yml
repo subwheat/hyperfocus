@@ -6,6 +6,8 @@ services:
     build:
       context: /root/hyperfocus/hyperfocus
       dockerfile: Dockerfile
+      args:
+        INSTALL_ML_CPU: ${INSTALL_ML_CPU:-0}
     container_name: hyperfocus-api
     restart: unless-stopped
     environment:
@@ -72,7 +74,7 @@ services:
         condition: service_healthy
     mem_limit: 64m
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/health"]
       interval: 30s
       timeout: 5s
       retries: 3

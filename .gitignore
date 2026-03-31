@@ -8,6 +8,7 @@ venv/
 # Backups
 *.bak.*
 *.bak
+*.bak_*
 
 # Secrets
 .env
@@ -23,3 +24,9 @@ authelia/config/users_database.yml
 # Docker
 docker-compose.yml.bak*
 .backup/
+nginx/certs/
+
+.aider*
+
+# Context files (auto-generated)
+CONTEXT_*.md
