@@ -125,6 +125,7 @@
         .terminal-mode-btn:hover { color: var(--text-inverse); }
         .terminal-mode-btn.active { background: var(--success); color: white; }
         .terminal-mode-btn.active.auto { background: var(--warning); }
+        .terminal-mode-btn.active.aider { background: #8b5cf6; }
         
         .terminal-content { flex: 1; overflow-y: auto; padding: var(--space-md); font-family: var(--font-mono); font-size: 13px; line-height: 1.5; color: #e7e5e4; }
         .terminal-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-tertiary); text-align: center; }
@@ -216,9 +217,11 @@
 <body>
     <div class="app">
         <header class="header">
-            <div class="logo"><div class="logo-icon">◈</div><span>ACP</span></div>
-            <div class="project-selector" id="projectSelector">
+            <div class="logo"><div class="logo-icon">◈</div><span>Hyperfocus</span></div>
+            <div class="project-selector" id="projectSelector" style="display:flex;align-items:center;gap:6px;">
                 <button class="project-btn" id="projectBtn"><span class="project-icon">🛣️</span><span class="project-name">Projets</span><span class="project-arrow">▼</span></button>
+                <button type="button" title="Créer un projet" onclick="ui.promptCreateProject()" style="width:28px;height:28px;border:1px solid var(--border);background:var(--bg-secondary);border-radius:6px;cursor:pointer;">+</button>
+                <button type="button" title="Supprimer le projet courant" onclick="ui.promptDeleteProject()" style="width:28px;height:28px;border:1px solid var(--border);background:var(--bg-secondary);border-radius:6px;cursor:pointer;">-</button>
                 <div class="project-dropdown" id="projectDropdown"></div>
             </div>
             <div class="header-center">
@@ -227,6 +230,7 @@
                     <button class="model-option" data-model="deepseek"><span class="dot"></span>DeepSeek</button>
                     <button class="model-option" data-model="claude"><span class="dot"></span>Claude</button>
                     <button class="model-option" data-model="qwen"><span class="dot"></span>Qwen3</button>
+                    <button class="model-option" data-model="kimi"><span class="dot"></span>Kimi</button>
                 </div>
                 <div class="feature-toggles">
                     <button class="feature-toggle" id="toggleWeb">🌐 Web</button>
@@ -247,7 +251,7 @@
                 <div class="pending-attachments" id="pendingAttachments"></div>
                 <div class="chat-input-wrapper">
                     <label class="chat-upload"><input type="file" id="fileInput" multiple><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></label>
-                    <textarea class="chat-input" id="chatInput" placeholder="Message chat… (@acp pour ACP)" rows="1"></textarea>
+                    <textarea class="chat-input" id="chatInput" placeholder="Message chat… (@hyperfocus pour Hyperfocus)" rows="1"></textarea>
                     <button class="chat-send" id="chatSend" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button>
                 </div>
             </div>
@@ -257,8 +261,9 @@
             <div class="terminal-header">
                 <span class="terminal-title">Terminal</span>
                 <div class="terminal-mode-toggle">
-                    <button class="terminal-mode-btn active" data-mode="manual" id="modeManual">MANUAL</button>
-                    <button class="terminal-mode-btn" data-mode="auto" id="modeAuto">AUTO</button>
+                    <button class="terminal-mode-btn active" data-mode="manual" id="modeManual" onclick="ui.setTerminalMode('manual')">MANUAL</button>
+                    <button class="terminal-mode-btn" data-mode="auto" id="modeAuto" onclick="ui.setTerminalMode('auto')">AUTO</button>
+                    <button class="terminal-mode-btn" data-mode="aider" id="modeAider" onclick="ui.setTerminalMode('aider')">AIDER</button>
                 </div>
                 <div id="autoControls" style="display:none; align-items:center; gap:4px; margin-left:8px;">
                     <button id="autoPauseBtn" onclick="toggleAutoPause()" title="Pause/Resume" style="padding:2px 8px; font-size:14px; background:#292524; border:1px solid #44403c; border-radius:4px; cursor:pointer;">⏸</button>
@@ -309,21 +314,41 @@ const CONFIG = {
     apiBase: window.location.origin + '/api',
     apiKey: 'HYPER_KQ57QFnPXwRhjaZCL2Qs2fzvTa9gmHBe',
     projects: {
-    sentinel: { name: 'Lane A', icon: '🛣️', color: '#ef4444' },
-    hyperfocus: { name: 'Hyperfocus', icon: '⚡', color: '#f59e0b' }
+    "acp-lab": { name: "ACP-LAB", icon: "🛣️", color: "#ef4444", workingDir: "/data/workspaces/acp-lab/worktree" },
+    hyperfocus: { name: "Hyperfocus", icon: "⚡", color: "#f59e0b", workingDir: "/data/workspaces/hyperfocus" },
+    "ego-metrology": { name: "EGO Metrology", icon: "🧪", color: "#10b981", workingDir: "/data/workspaces/acp-lab/worktree/ego_metrology" }
 },
 models: {
         deepseek: { name: 'DeepSeek', endpoint: '/chat/completions', model: 'deepseek', color: '#6366f1' },
         claude: { name: 'Claude', endpoint: '/chat/completions', model: 'claude', color: '#d97706' },
-        qwen: { name: 'Qwen3', endpoint: '/chat/completions', model: 'qwen', color: '#10b981' }
+        qwen: { name: 'Qwen3', endpoint: '/chat/completions', model: 'qwen', color: '#10b981' },
+        kimi: { name: 'Kimi', endpoint: '/chat/completions', model: 'kimi', color: '#8b5cf6' },
+        aider: { name: 'Kimi', endpoint: '/chat/completions', model: 'aider', color: '#8b5cf6' }
+    },
+    aiderModels: {
+        kimi: {
+            name: 'Kimi',
+            provider: 'moonshot',
+            cliModel: 'openai/moonshot-v1-8k',
+            apiEnv: 'KIMI_API_KEY',
+            color: '#8b5cf6'
+        },
+        minimax: {
+            name: 'MiniMax',
+            provider: 'minimax',
+            cliModel: 'openai/minimax-m2.7',
+            apiEnv: 'MINIMAX_API_KEY',
+            color: '#06b6d4'
+        }
     }
 };
 
 const state = {
     sessionId: null, isStreaming: false, autoPaused: false, autoInfinite: false, autoRecursionCount: 0, artefacts: [], pendingFiles: [],
-    currentModel: 'deepseek', currentProject: 'sentinel', workingDir: '/data/workspaces/acp-lab/worktree', terminalMode: 'manual',
+    currentModel: 'deepseek', currentProject: null, workingDir: '/data/session_contexts', terminalMode: 'manual',
+    aiderProvider: 'moonshot', aiderModelKey: 'kimi',
     lastAssistantCodeMessage: null, // Store last LLM message with code blocks for confirmation flow // 'manual' | 'auto'
-    features: { web: false, ocr: false, terminal: true }, contextArtefacts: []
+    features: { web: false, ocr: false, terminal: false }, contextArtefacts: [], projectRuntimeMeta: {}
 };
 
 const $ = id => document.getElementById(id);
@@ -331,6 +356,26 @@ const esc = t => { const d = document.createElement('div'); d.textContent = t; r
 const fileIcon = ext => ({ md: '📝', txt: '📄', py: '🐍', js: '📜', json: '📋', pdf: '📕', png: '🖼', jpg: '🖼', csv: '📊', html: '🌐', sh: '⚙️' }[ext] || '📄');
 const formatSize = b => b < 1024 ? b + 'B' : b < 1048576 ? (b/1024).toFixed(1) + 'KB' : (b/1048576).toFixed(1) + 'MB';
 const formatDate = d => { const diff = Date.now() - new Date(d); return diff < 60000 ? 'now' : diff < 3600000 ? Math.floor(diff/60000) + 'm' : diff < 86400000 ? Math.floor(diff/3600000) + 'h' : new Date(d).toLocaleDateString(); };
+
+function getSelectedProjectKey() {
+    return state.currentProject ? String(state.currentProject) : null;
+}
+
+function getProjectWorkingDir(projectKey) {
+    const key = projectKey ? String(projectKey) : null;
+    if (!key) return '/data/session_contexts';
+    const meta = state.projectRuntimeMeta[key] || {};
+    return meta.working_dir || (CONFIG.projects[key] && CONFIG.projects[key].workingDir) || ('/data/workspaces/' + key);
+}
+
+function requireSelectedProject(actionLabel = 'cette action') {
+    const projectKey = getSelectedProjectKey();
+    if (!projectKey) {
+        toast.show('Sélectionne d’abord un projet pour ' + actionLabel, 'warning');
+        return null;
+    }
+    return projectKey;
+}
 
 const toast = {
     show(msg, type = 'info') {
@@ -345,7 +390,9 @@ const toast = {
 async function importSandboxFile(filepath) {
     const formData = new FormData();
     formData.append('filepath', filepath);
-    formData.append('project_key', state.currentProject || 'cresus');
+    const projectKey = requireSelectedProject('importer un fichier sandbox');
+    if (!projectKey) throw new Error('No project selected');
+    formData.append('project_key', projectKey);
     const r = await fetch(CONFIG.apiBase + '/artefacts/from-sandbox', {
         method: 'POST',
         headers: { 'X-API-Key': CONFIG.apiKey },
@@ -370,13 +417,17 @@ const api = {
     checkHealth: async () => { try { const r = await fetch('/health'); const d = await r.json(); return d.status === 'healthy'; } catch { return false; } },
     sendMessage: (content) => {
         const termCtx = getTerminalContext();
+        const requestModel = termCtx.mode === 'aider' ? 'aider' : state.currentModel;
+        const requestEndpoint = (CONFIG.models[requestModel] || CONFIG.models[state.currentModel]).endpoint;
         const modeInstructions = termCtx.mode === 'auto' 
             ? `[MODE AUTO] Tu as accès au terminal sandbox ACP.\n\n📁 CRÉER DES FICHIERS CODE (.py, .sh, .js, etc.):\nUtilise TOUJOURS un heredoc bash en UN SEUL bloc:\n\`\`\`bash\ncat > fichier.py << 'EOF'\n# contenu du fichier\nprint("hello")\nEOF\n\`\`\`\n\n📄 CRÉER DES DOCUMENTS (.md, .docx, .pdf):\n[CREATE_DOC:format:filename]contenu[/CREATE_DOC]\n\n⚠️ IMPORTANT:\n- UN SEUL bloc de code à la fois\n- Attends les résultats avant de continuer\n- N'utilise PAS plusieurs echo >> pour créer un fichier`
+            : termCtx.mode === 'aider'
+            ? `[MODE AIDER] La requête sera traitée par Aider/Kimi sur le dépôt courant. Décris clairement la tâche, les contraintes, les fichiers ou surfaces impactées et les tests attendus.`
             : `[MODE MANUAL] Tu as accès au terminal sandbox ACP.\nL'utilisateur est TDAH - UNE SEULE action à la fois.\n\n📁 FICHIERS CODE: cat > file.py << 'EOF'\n...\nEOF\n📄 DOCUMENTS: [CREATE_DOC:md:file.md]contenu[/CREATE_DOC]`;
         const enrichedContent = '[TERMINAL CONTEXT]\nProject: ' + termCtx.project + '\nWorkDir: ' + termCtx.workingDir + '\nMode: ' + termCtx.mode.toUpperCase() + '\n' + modeInstructions + '\nRecent commands:\n' + termCtx.history + '\n\n[USER REQUEST]\n' + content;
-        return api.fetch(CONFIG.models[state.currentModel].endpoint, {
+        return api.fetch(requestEndpoint, {
             method: 'POST',
-            body: JSON.stringify({ messages: [{ role: 'user', content: enrichedContent }], session_id: state.sessionId, model: state.currentModel, artefact_ids: state.contextArtefacts.map(a => a.id) })
+            body: JSON.stringify({ messages: [{ role: 'user', content: enrichedContent }], session_id: state.sessionId, model: requestModel, project_key: getSelectedProjectKey(), artefact_ids: state.contextArtefacts.map(a => a.id) })
         });
     },
     getArtefacts: (src) => api.fetch('/artefacts' + (src ? `?source=${src}` : '')),
@@ -400,7 +451,7 @@ const api = {
     uploadArtefact: (file, onProgress) => new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest(), fd = new FormData();
         fd.append('file', file);
-        fd.append('project_key', state.currentProject || 'cresus');
+        fd.append('project_key', getSelectedProjectKey());
         xhr.upload.onprogress = e => e.lengthComputable && onProgress?.(Math.round(e.loaded / e.total * 100));
         xhr.onload = () => xhr.status < 300 ? resolve(JSON.parse(xhr.responseText)) : reject(new Error(xhr.status));
         xhr.onerror = () => reject(new Error('Upload failed'));
@@ -410,14 +461,37 @@ const api = {
     }),
     previewArtefact: async (id) => { const r = await fetch(CONFIG.apiBase + `/artefacts/${id}/preview`, { headers: api.headers() }); return r.text(); },
     // Terminal Bridge
-    executeCommand: (cmd) => api.fetch('/terminal-bridge/execute', { method: 'POST', body: JSON.stringify({ command: cmd }) }),
+    executeCommand: (cmd) => {
+        const project = getSelectedProjectKey();
+        const runtimeKind = (state.projectRuntimeMeta[project] || {}).runtime_kind || 'legacy_bridge';
+        if (runtimeKind === 'legacy_bridge') {
+            return api.fetch('/terminal-bridge/execute', { method: 'POST', body: JSON.stringify({ command: cmd, working_dir: state.workingDir || getProjectWorkingDir(project) }) });
+        }
+        return api.fetch('/sandbox/projects/' + project + '/execute', { method: 'POST', body: JSON.stringify({ command: cmd, working_dir: state.workingDir || '/workspace' }) });
+    },
     executePython: (code) => api.fetch('/terminal-bridge/execute-python', { method: 'POST', body: JSON.stringify({ code }) }),
     // Sandbox API
     getSandboxProjects: () => api.fetch('/sandbox/projects'),
-    sandboxExecute: (project, cmd, workingDir) => api.fetch('/terminal-bridge/execute', {
+    createSandboxProject: (projectKey, displayName) => api.fetch('/sandbox/projects', {
         method: 'POST',
-        body: JSON.stringify({ command: cmd, working_dir: workingDir || '/data/workspaces/acp-lab/worktree' })
+        body: JSON.stringify({ project_key: projectKey, display_name: displayName || projectKey })
     }),
+    deleteSandboxProject: (project) => api.fetch('/sandbox/projects/' + project, {
+        method: 'DELETE'
+    }),
+    sandboxExecute: (project, cmd, workingDir) => {
+        const runtimeKind = (state.projectRuntimeMeta[project] || {}).runtime_kind || "legacy_bridge";
+        if (runtimeKind === "legacy_bridge") {
+            return api.fetch("/terminal-bridge/execute", {
+                method: "POST",
+                body: JSON.stringify({ command: cmd, working_dir: workingDir || getProjectWorkingDir(project) })
+            });
+        }
+        return api.fetch("/sandbox/projects/" + project + "/execute", {
+            method: "POST",
+            body: JSON.stringify({ command: cmd, working_dir: workingDir || getProjectWorkingDir(project) })
+        });
+    },
     sandboxStart: (project) => api.fetch('/sandbox/projects/' + project + '/start', { method: 'POST' }),
     sandboxStop: (project) => api.fetch('/sandbox/projects/' + project + '/stop', { method: 'POST' })
 };
@@ -590,7 +664,7 @@ function getTerminalContext() {
         return cmd + (result ? '\n' + result.slice(0, 500) : '');
     }).join('\n---\n');
     return {
-        project: CONFIG.projects[state.currentProject]?.name || state.currentProject,
+        project: getSelectedProjectKey(),
         workingDir: state.workingDir,
         mode: state.terminalMode,
         history: history || '(no recent commands)'
@@ -618,12 +692,13 @@ const terminal = {
     },
     async execute(cmd, isCode = false) {
         const startTime = Date.now();
-        const projectKey = state.currentProject || 'cresus';
+        const projectKey = requireSelectedProject('exécuter une commande');
+        if (!projectKey) return { success: false, error: 'No project selected' };
         const proj = CONFIG.projects[projectKey] || { icon: '📁', name: projectKey };
         const projectLabel = proj.name || projectKey;
         const cmdPreview = cmd.length > 80 ? cmd.slice(0, 80) + '...' : cmd;
         
-        this.append('<div class="cmd">' + proj.icon + ' ' + projectLabel + ' $ ' + esc(cmdPreview) + '</div><div class="info">⏳ Executing in terminal bridge...</div>');
+        this.append('<div class="cmd">' + proj.icon + ' ' + projectLabel + ' $ ' + esc(cmdPreview) + '</div><div class="info">⏳ Executing in sandbox...</div>');
         
         try {
             const result = await api.sandboxExecute(projectKey, cmd, state.workingDir);
@@ -639,7 +714,7 @@ const terminal = {
                     } else if (cdPath === '..') {
                         state.workingDir = state.workingDir.split('/').slice(0, -1).join('/') || '/';
                     } else if (cdPath === '~' || cdPath === '') {
-                        state.workingDir = '/data/workspaces/acp-lab/worktree';
+                        state.workingDir = getProjectWorkingDir(projectKey);
                     } else {
                         state.workingDir = state.workingDir + '/' + cdPath;
                     }
@@ -678,19 +753,37 @@ const ui = {
     },
     
     setTerminalMode(mode) {
-        state.terminalMode = mode; if (typeof updateAutoControlsVisibility === 'function') updateAutoControlsVisibility();
+        state.terminalMode = mode;
+        if (mode === 'aider') {
+            state.aiderProvider = 'moonshot';
+            state.aiderModelKey = 'kimi';
+            state.currentModel = 'kimi';
+            state.chatMode = false;
+            setTimeout(() => { try { if (typeof ui !== 'undefined' && typeof ui.setModel === 'function') ui.setModel('kimi'); } catch (e) {} }, 0);
+        }
+        if (typeof updateAutoControlsVisibility === 'function') updateAutoControlsVisibility();
         $('modeManual').classList.toggle('active', mode === 'manual');
         $('modeAuto').classList.toggle('active', mode === 'auto');
+        $('modeAider').classList.toggle('active', mode === 'aider');
         $('modeAuto').classList.toggle('auto', mode === 'auto');
+        $('modeAider').classList.toggle('aider', mode === 'aider');
+        if (typeof refreshModelButtons === 'function') refreshModelButtons();
+        if (typeof refreshPlaceholder === 'function') refreshPlaceholder();
+        if (typeof this.updateContext === 'function') this.updateContext();
+        if (typeof this.updateContextBar === 'function') this.updateContextBar();
         toast.show('Terminal: ' + mode.toUpperCase() + ' mode', mode === 'auto' ? 'warning' : 'info');
     },
     
     setProject(p) {
-        state.currentProject = p;
-        const proj = CONFIG.projects[p];
+        state.currentProject = p || null;
+        state.workingDir = state.currentProject ? getProjectWorkingDir(state.currentProject) : '/data/session_contexts';
+        const proj = state.currentProject ? CONFIG.projects[state.currentProject] : null;
         if (proj) {
             document.querySelector(".project-icon").textContent = proj.icon;
             document.querySelector(".project-name").textContent = proj.name;
+        } else {
+            document.querySelector(".project-icon").textContent = "📁";
+            document.querySelector(".project-name").textContent = "Aucun projet";
         }
         $("projectDropdown").classList.remove("open");
         terminal.clear();
@@ -699,9 +792,39 @@ const ui = {
         toast.show("Project: " + (proj ? proj.name : p), "info");
     },
     
+    async promptCreateProject() {
+        const raw = window.prompt("Nom du nouveau projet (a-z0-9_-)", "");
+        if (!raw) return;
+        const key = raw.trim().toLowerCase();
+        if (!key) return;
+        await api.createSandboxProject(key, raw.trim());
+        await this.loadProjects();
+        this.setProject(key);
+        toast.show("Projet créé: " + key, "success");
+    },
+
+    async promptDeleteProject() {
+        const project = getSelectedProjectKey();
+        if (!project) {
+            toast.show("Aucun projet sélectionné", "warning");
+            return;
+        }
+        if (["acp-lab", "hyperfocus", "ego-metrology"].includes(project)) {
+            toast.show("Projet de base protégé", "warning");
+            return;
+        }
+        const ok = window.confirm("Supprimer le projet '" + project + "' ?");
+        if (!ok) return;
+        await api.deleteSandboxProject(project);
+        await this.loadProjects();
+        this.setProject(null);
+        toast.show("Projet supprimé: " + project, "success");
+    },
+
     async loadProjects() {
         try {
             const data = await api.getSandboxProjects();
+            state.projectRuntimeMeta = Object.fromEntries((data.projects || []).map(p => [p.name, p]));
             const dropdown = $("projectDropdown");
             dropdown.innerHTML = data.projects.map(function(p) {
                 const conf = CONFIG.projects[p.name] || { icon: "📁", name: p.name };
@@ -723,7 +846,8 @@ const ui = {
     
     updateContext() {
         const proj = CONFIG.projects[state.currentProject] || { icon: '📁', name: state.currentProject };
-        const items = ['<div class="context-item active"><span style="color:' + CONFIG.models[state.currentModel].color + '">●</span> ' + CONFIG.models[state.currentModel].name + '</div>'];
+        const effectiveModel = state.terminalMode === 'aider' ? 'kimi' : state.currentModel;
+        const items = ['<div class="context-item active"><span style="color:' + CONFIG.models[effectiveModel].color + '">●</span> ' + CONFIG.models[effectiveModel].name + '</div>'];
         items.push('<div class="context-item active">' + proj.icon + ' ' + proj.name + '</div>');
         if (state.features.web) items.push('<div class="context-item active">🌐</div>');
         if (state.features.terminal) items.push(`<div class="context-item active">⌨️ ${state.terminalMode.toUpperCase()}</div>`);
@@ -983,18 +1107,21 @@ async function sendMessage() {
     
     try {
         const r = await api.sendMessage(content);
+        const responseModel = state.terminalMode === 'aider' ? 'aider' : state.currentModel;
         state.sessionId = r.session_id;
         ui.removeLoading();
-        ui.addMessage('assistant', r.message.content, { model: state.currentModel });
+        ui.addMessage('assistant', r.message.content, { model: responseModel });
         // Parse and create any documents in the response
         await parseAndCreateDocuments(r.message.content);
-        // Auto-execute code blocks if in AUTO mode
-        // Only auto-execute if LLM is not asking for confirmation
+        // Auto-execute code blocks only outside Aider mode
+        const isAiderMode = state.terminalMode === 'aider';
         const isAskingConfirmation = r.message.content.toLowerCase().includes('veux-tu que je lance') || 
                                       r.message.content.toLowerCase().includes('veux-tu que j\'exécute') ||
                                       r.message.content.toLowerCase().includes('shall i run') ||
                                       r.message.content.toLowerCase().includes('want me to execute');
-        if (isAskingConfirmation) {
+        if (isAiderMode) {
+            state.lastAssistantCodeMessage = null;
+        } else if (isAskingConfirmation) {
             // Store message for when user confirms
             state.lastAssistantCodeMessage = r.message.content;
         } else {
@@ -1043,7 +1170,7 @@ document.addEventListener('drop', async e => {
     loadArtefacts();
     
     // Model selector
-    $('modelSelector').onclick = e => { const b = e.target.closest('.model-option'); if (b) ui.setModel(b.dataset.model); };
+    $('modelSelector').onclick = e => { const b = e.target.closest('.model-option'); if (!b) return; if (state.terminalMode === 'aider' && b.dataset.model !== 'kimi') { state.currentModel = 'kimi'; state.chatMode = false; if (typeof refreshModelButtons === 'function') refreshModelButtons(); if (typeof refreshPlaceholder === 'function') refreshPlaceholder(); if (typeof ui.updateContext === 'function') ui.updateContext(); if (typeof ui.updateContextBar === 'function') ui.updateContextBar(); toast.show('Mode AIDER: Kimi verrouillé', 'info'); return; } ui.setModel(b.dataset.model); };
     
     // Feature toggles
     $('toggleWeb').onclick = () => ui.toggleFeature('web');
@@ -1440,7 +1567,7 @@ document.addEventListener('drop', async e => {
     const $ = window.$ || ((id) => document.getElementById(id));
     if (!window.state || !window.ui || !window.CONFIG) return;
 
-    const CHAT_MODELS = new Set(['deepseek', 'claude', 'qwen']);
+    const CHAT_MODELS = new Set(['deepseek', 'claude', 'qwen', 'kimi']);
 
     state.chatMode = state.chatMode !== false;
     state.messageMode = state.messageMode || 'discussion';
@@ -1462,12 +1589,22 @@ document.addEventListener('drop', async e => {
     }
 
     function refreshModelButtons() {
+        const aiderLocked = state.terminalMode === 'aider';
         document.querySelectorAll('#modelSelector .model-option').forEach(btn => {
             const model = btn.dataset.model;
             if (model === 'chat') {
-                btn.classList.toggle('active', !!state.chatMode);
-            } else if (CHAT_MODELS.has(model)) {
-                btn.classList.toggle('active', !state.chatMode && model === state.currentModel);
+                btn.disabled = aiderLocked;
+                btn.classList.toggle('active', !aiderLocked && !!state.chatMode);
+                return;
+            }
+            if (model === 'kimi') {
+                btn.disabled = false;
+                btn.classList.toggle('active', aiderLocked || (!state.chatMode && state.currentModel === 'kimi'));
+                return;
+            }
+            if (CHAT_MODELS.has(model)) {
+                btn.disabled = aiderLocked;
+                btn.classList.toggle('active', !aiderLocked && !state.chatMode && model === state.currentModel);
             }
         });
     }
@@ -1475,9 +1612,10 @@ document.addEventListener('drop', async e => {
     function refreshPlaceholder() {
         const input = $('chatInput');
         if (!input) return;
+        const effectiveModel = state.terminalMode === 'aider' ? 'kimi' : state.currentModel;
         input.placeholder = state.chatMode
             ? 'Message chat… (@acp pour ACP)'
-            : `Message ${CONFIG.models[state.currentModel]?.name || 'ACP'}...`;
+            : `Message ${CONFIG.models[effectiveModel]?.name || 'ACP'}...`;
     }
 
     function renderChatContextBar() {
@@ -1486,7 +1624,8 @@ document.addEventListener('drop', async e => {
 
         const senderKey = state.currentSender || 'julien';
         const senderLabel = (window.PARTICIPANTS?.[senderKey] || { label: senderKey }).label;
-        const modelLabel = CONFIG.models[state.currentModel]?.name || state.currentModel || 'DeepSeek';
+        const effectiveModel = state.terminalMode === 'aider' ? 'kimi' : state.currentModel;
+        const modelLabel = CONFIG.models[effectiveModel]?.name || effectiveModel || 'DeepSeek';
 
         const items = [
             '<div class="context-item active">💬 Chat partagé</div>',
@@ -1517,12 +1656,33 @@ document.addEventListener('drop', async e => {
         ui.setModel = function(model) {
             ensureChatButton();
 
+            if (state.terminalMode === 'aider' && model !== 'kimi') {
+                state.currentModel = 'kimi';
+                state.chatMode = false;
+                refreshModelButtons();
+                refreshPlaceholder();
+                if (typeof ui.updateContext === 'function') ui.updateContext();
+                if (typeof ui.updateContextBar === 'function') ui.updateContextBar();
+                toast.show('Mode AIDER: Kimi verrouillé', 'info');
+                return;
+            }
+
             if (model === 'chat') {
                 state.chatMode = true;
                 refreshModelButtons();
                 refreshPlaceholder();
                 if (typeof ui.updateContextBar === 'function') ui.updateContextBar();
                 return;
+            }
+
+            if (model === 'kimi') {
+                state.chatMode = false;
+                const out = originalSetModel(model);
+                refreshModelButtons();
+                refreshPlaceholder();
+                if (typeof ui.updateContext === 'function') ui.updateContext();
+                if (typeof ui.updateContextBar === 'function') ui.updateContextBar();
+                return out;
             }
 
             if (CHAT_MODELS.has(model)) {
@@ -1702,7 +1862,7 @@ document.addEventListener('drop', async e => {
     }
 
     function getProjectKey() {
-        return String(window.state?.currentProject || 'acp').replace(/[^a-z0-9_-]+/ig, '_');
+        return String(window.state?.currentProject || 'no-project').replace(/[^a-z0-9_-]+/ig, '_');
     }
 
     function getContextFilename() {
@@ -1743,7 +1903,7 @@ document.addEventListener('drop', async e => {
     }
 
     function buildDocHeader() {
-        const project = window.state?.currentProject || 'acp';
+        const project = window.state?.currentProject || 'no-project';
         return [
             '# ACP_CONTEXT',
             '',
@@ -1816,6 +1976,7 @@ document.addEventListener('drop', async e => {
                 messages: [{ role: 'user', content: prompt }],
                 session_id: window.state?.sessionId || null,
                 model,
+                project_key: window.state?.currentProject || 'no-project',
                 artefact_ids: [artefact.id]
             })
         });
@@ -1841,7 +2002,7 @@ document.addEventListener('drop', async e => {
                 newContent,
                 filename,
                 'md',
-                `ACP Context ${window.state?.currentProject || 'acp'}`
+                `ACP Context ${window.state?.currentProject || 'no-project'}`
             );
         }
 

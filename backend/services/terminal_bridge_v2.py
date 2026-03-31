@@ -11,6 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 import subprocess
+from .runtime_projects import list_runtime_projects, get_runtime_project, create_runtime_project, delete_runtime_project
 
 router = APIRouter(prefix="/api/sandbox", tags=["Sandbox Terminal"])
 
@@ -68,6 +69,10 @@ class ProjectStatus(BaseModel):
     icon: str
     description: str
     port: int
+
+class CreateProjectRequest(BaseModel):
+    project_key: str
+    display_name: Optional[str] = None
 
 # ============================================================================
 # HELPERS
@@ -159,33 +164,92 @@ async def execute_in_container(container: str, command: str, working_dir: str, t
 
 @router.get("/projects")
 async def list_projects():
-    """Liste tous les projets sandbox disponibles"""
+    """Liste tous les projets runtime disponibles"""
     projects = []
-    
-    for name, config in SANDBOX_PROJECTS.items():
-        status = "running" if check_container_running(config["container"]) else "stopped"
+
+    for project in list_runtime_projects():
+        name = project["project_key"]
+        runtime_kind = project.get("runtime_kind", "legacy_bridge")
+        container = project.get("container_name") or ""
+        if runtime_kind == "docker_sandbox" and container:
+            status = "running" if check_container_running(container) else "stopped"
+        else:
+            status = "legacy"
         projects.append({
             "name": name,
-            "container": config["container"],
+            "container": container,
             "status": status,
-            "icon": config["icon"],
-            "description": config["description"],
-            "port": config["port"]
+            "icon": project.get("icon", "📁"),
+            "description": project.get("display_name", name),
+            "port": 0,
+            "runtime_kind": runtime_kind
         })
-    
+
     return {"projects": projects}
+
+
+@router.post("/projects")
+async def create_project(request: CreateProjectRequest):
+    """Créer un projet runtime persistant"""
+    try:
+        project = create_runtime_project(request.project_key, request.display_name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    runtime_kind = project.get("runtime_kind", "legacy_bridge")
+    return {
+        "project": {
+            "name": project["project_key"],
+            "container": project.get("container_name") or "",
+            "status": "legacy" if runtime_kind != "docker_sandbox" else "stopped",
+            "icon": project.get("icon", "📁"),
+            "description": project.get("display_name", project["project_key"]),
+            "port": 0,
+            "runtime_kind": runtime_kind,
+        }
+    }
+
+
+@router.delete("/projects/{project}")
+async def delete_project(project: str):
+    """Supprimer un projet runtime persistant"""
+    try:
+        removed = delete_runtime_project(project)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {
+        "deleted": removed["project_key"],
+        "ok": True,
+    }
 
 
 @router.get("/projects/{project}")
 async def get_project_status(project: str):
     """Statut détaillé d'un projet"""
     
-    if project not in SANDBOX_PROJECTS:
+    runtime_project = get_runtime_project(project)
+    if not runtime_project:
         raise HTTPException(404, f"Project '{project}' not found")
-    
-    config = SANDBOX_PROJECTS[project]
+
+    runtime_kind = runtime_project.get("runtime_kind", "legacy_bridge")
+    config = {
+        "container": runtime_project.get("container_name") or "",
+        "icon": runtime_project.get("icon", "📁"),
+        "description": runtime_project.get("display_name", project),
+        "port": 0,
+    }
     container = config["container"]
-    
+
+    if runtime_kind != "docker_sandbox":
+        return {
+            "project": project,
+            "status": "legacy",
+            "container": container,
+            "runtime_kind": runtime_kind,
+            "message": f"Project '{project}' is configured as legacy_bridge on this machine"
+        }
+
     # Vérifier le statut
     is_running = check_container_running(container)
     
@@ -194,7 +258,8 @@ async def get_project_status(project: str):
             "project": project,
             "status": "stopped",
             "container": container,
-            "message": f"Container {container} is not running. Start with: cd /opt/philae/sandboxes/{project} && docker compose up -d"
+            "runtime_kind": runtime_kind,
+            "message": f"Container {container} is not running"
         }
     
     # Récupérer des infos sur le container
@@ -214,6 +279,7 @@ async def get_project_status(project: str):
         "icon": config["icon"],
         "description": config["description"],
         "port": config["port"],
+        "runtime_kind": runtime_kind,
         "disk": disk_info
     }
 
@@ -223,12 +289,16 @@ async def execute_command(project: str, request: ExecuteRequest):
     """Exécuter une commande dans la sandbox du projet"""
     
     # Vérifier le projet
-    if project not in SANDBOX_PROJECTS:
+    runtime_project = get_runtime_project(project)
+    if not runtime_project:
         raise HTTPException(404, f"Project '{project}' not found")
-    
-    config = SANDBOX_PROJECTS[project]
-    container = config["container"]
-    
+
+    runtime_kind = runtime_project.get("runtime_kind", "legacy_bridge")
+    container = runtime_project.get("container_name") or ""
+
+    if runtime_kind != "docker_sandbox":
+        raise HTTPException(409, f"Project '{project}' is configured as legacy_bridge on this machine")
+
     # Vérifier que le container tourne
     if not check_container_running(container):
         raise HTTPException(503, f"Sandbox '{project}' is not running. Start it first.")
@@ -261,56 +331,37 @@ async def execute_command(project: str, request: ExecuteRequest):
 async def start_project(project: str):
     """Démarrer la sandbox d'un projet"""
     
-    if project not in SANDBOX_PROJECTS:
+    runtime_project = get_runtime_project(project)
+    if not runtime_project:
         raise HTTPException(404, f"Project '{project}' not found")
-    
-    sandbox_dir = f"/opt/philae/sandboxes/{project}"
-    
-    try:
-        result = subprocess.run(
-            ["docker", "compose", "up", "-d"],
-            cwd=sandbox_dir,
-            capture_output=True, text=True, timeout=60
-        )
-        
-        if result.returncode == 0:
-            return {"status": "started", "project": project, "output": result.stdout}
-        else:
-            raise HTTPException(500, f"Failed to start: {result.stderr}")
-            
-    except FileNotFoundError:
-        raise HTTPException(404, f"Sandbox directory not found: {sandbox_dir}")
-    except Exception as e:
-        raise HTTPException(500, str(e))
+
+    runtime_kind = runtime_project.get("runtime_kind", "legacy_bridge")
+    if runtime_kind != "docker_sandbox":
+        raise HTTPException(409, f"Project '{project}' is configured as legacy_bridge on this machine")
+
+    raise HTTPException(501, f"docker_sandbox start is not wired to the runtime registry yet for project '{project}'")
 
 
 @router.post("/projects/{project}/stop")
 async def stop_project(project: str):
     """Arrêter la sandbox d'un projet"""
     
-    if project not in SANDBOX_PROJECTS:
+    runtime_project = get_runtime_project(project)
+    if not runtime_project:
         raise HTTPException(404, f"Project '{project}' not found")
-    
-    sandbox_dir = f"/opt/philae/sandboxes/{project}"
-    
-    try:
-        result = subprocess.run(
-            ["docker", "compose", "down"],
-            cwd=sandbox_dir,
-            capture_output=True, text=True, timeout=60
-        )
-        
-        return {"status": "stopped", "project": project, "output": result.stdout}
-        
-    except Exception as e:
-        raise HTTPException(500, str(e))
+
+    runtime_kind = runtime_project.get("runtime_kind", "legacy_bridge")
+    if runtime_kind != "docker_sandbox":
+        raise HTTPException(409, f"Project '{project}' is configured as legacy_bridge on this machine")
+
+    raise HTTPException(501, f"docker_sandbox stop is not wired to the runtime registry yet for project '{project}'")
 
 
 @router.post("/projects/{project}/install")
 async def install_package(project: str, package: str, manager: str = "pip"):
     """Installer un package dans la sandbox"""
     
-    if project not in SANDBOX_PROJECTS:
+    if not get_runtime_project(project):
         raise HTTPException(404, f"Project '{project}' not found")
     
     if manager == "pip":

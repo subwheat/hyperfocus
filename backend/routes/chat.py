@@ -4,8 +4,10 @@ Hyperfocus Chat Routes - Multi-Model Support
 REST API endpoints for chat operations with DeepSeek, Claude, and Qwen support.
 """
 
+import asyncio
 import json
 import os
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -31,13 +33,35 @@ from ..services.project_memory import (
     ensure_project_memory_current,
     prepend_project_memory_to_messages,
 )
+from ..services.runtime_projects import resolve_host_workspace
 
 # Multi-model config
-CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "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")
+CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "").strip()
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 QWEN_BASE_URL = os.getenv("QWEN_BASE_URL", "http://172.17.0.1:8001")
 QWEN_MODEL = os.getenv("QWEN_MODEL", "Qwen/Qwen3-8B")
+
+AIDER_BIN = os.getenv("AIDER_BIN", "/data/aider-venv/bin/aider")
+AIDER_MODEL = os.getenv("AIDER_MODEL", "openai/moonshot-v1-8k")
+KIMI_CHAT_MODEL = os.getenv("KIMI_CHAT_MODEL", AIDER_MODEL.replace("openai/", ""))
+AIDER_OPENAI_API_BASE = os.getenv("AIDER_OPENAI_API_BASE", os.getenv("OPENAI_API_BASE", "https://api.moonshot.ai/v1"))
+KIMI_API_KEY = os.getenv("KIMI_API_KEY", "")
+if not KIMI_API_KEY:
+    secret_path = Path("/data/secrets/kimi_api_key")
+    try:
+        if secret_path.exists():
+            KIMI_API_KEY = secret_path.read_text(encoding="utf-8").strip()
+    except PermissionError:
+        KIMI_API_KEY = ""
+AIDER_REPO_ROOT = os.getenv("AIDER_REPO_ROOT", "/app")
+AIDER_TIMEOUT = int(os.getenv("AIDER_TIMEOUT", "900"))
+AIDER_MAX_OUTPUT_CHARS = int(os.getenv("AIDER_MAX_OUTPUT_CHARS", "120000"))
+
+AIDER_AUDIT_PROMPT = """Tu es l'auditeur senior du projet ACP/LANE A. Ton rôle est de vérifier que chaque ticket respecte strictement l'architecture cible v0.1.
+* Règle d'or : Séparation nette entre ACP (Control Plane) et ego-metrology (Mesure).
+* Interdiction : Pas d'appel synchrone bloquant entre les deux.
+* Obligation : Chaque commit doit passer les tests unitaires et respecter la Definition of Done (DoD) du ticket concerné."""
 
 SYSTEM_PROMPT_HYPERFOCUS = """Tu t'appelles ACP Assistant.
 
@@ -165,6 +189,158 @@ async def call_qwen(messages: list[dict], max_tokens: int = 8192, temperature: f
         return response.json()
 
 
+
+
+def _truncate_aider_text(text: str, limit: int = 12000) -> str:
+    text = (text or "").replace("\r\n", "\n").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "\n...[truncated]"
+
+
+def build_aider_prompt(messages: list[dict]) -> str:
+    conversation_parts = []
+    last_user_message = ""
+
+    for msg in messages[-12:]:
+        role = str(msg.get("role") or "user").strip().upper()
+        content = _truncate_aider_text(str(msg.get("content") or ""))
+        if not content:
+            continue
+        if role == "USER":
+            last_user_message = content
+        conversation_parts.append(f"[{role}]\n{content}")
+
+    active_request = last_user_message or "Analyse la conversation ci-dessus et agis en conséquence."
+    joined_conversation = "\n\n---\n\n".join(conversation_parts)
+
+    return (
+        AIDER_AUDIT_PROMPT
+        + "\n\nContraintes d'exécution :\n"
+        + "- Travaille sur le dépôt courant.\n"
+        + "- Préserve l'injection des artefacts et le fichier CONTEXT auto-amélioré.\n"
+        + "- Si tu modifies des fichiers, résume précisément les changements.\n"
+        + "- Si des tests passent, termine par la ligne exacte: Audit terminé - Prêt pour commit\n"
+        + "- Propose un message de commit concis à la fin.\n"
+        + "\n[CONTEXTE DE CONVERSATION]\n"
+        + joined_conversation
+        + "\n\n[DEMANDE ACTIVE]\n"
+        + active_request
+    )
+
+
+async def call_kimi(messages: list[dict], max_tokens: int = 8192, temperature: float = 0.7) -> dict:
+    if not KIMI_API_KEY:
+        raise ChatServiceError("KIMI_API_KEY not configured")
+
+    api_base = (AIDER_OPENAI_API_BASE or "https://api.moonshot.ai/v1").rstrip("/")
+    model_name = (KIMI_CHAT_MODEL or AIDER_MODEL or "moonshot-v1-8k").replace("openai/", "")
+
+    headers = {
+        "Authorization": f"Bearer {KIMI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model_name,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "stream": False,
+    }
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(f"{api_base}/chat/completions", headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+
+async def call_aider(
+    messages: list[dict],
+    max_tokens: int = 8192,
+    temperature: float = 0.7,
+    project_key: Optional[str] = None,
+) -> dict:
+    project_key = str(project_key or "").strip().lower() or detect_project_key_from_messages(messages or []) or None
+    resolved_repo_root = None
+    if project_key:
+        try:
+            resolved_repo_root = resolve_host_workspace(project_key)
+        except Exception:
+            project_key = None
+            resolved_repo_root = None
+
+    repo_root = Path(resolved_repo_root) if resolved_repo_root else Path("/data/workspaces/hyperfocus")
+    kimi_cli_path = Path("/data/kimi-cli/tool-bin/kimi")
+    kimi_cli_config = Path("/data/kimi-cli/home/.kimi/config.toml")
+    kimi_cli_timeout = int(os.getenv("KIMI_CLI_TIMEOUT", "900"))
+    kimi_cli_max_output_chars = int(os.getenv("KIMI_CLI_MAX_OUTPUT_CHARS", "120000"))
+
+    if not kimi_cli_path.exists():
+        raise ChatServiceError(f"Kimi CLI binary not found: {kimi_cli_path}")
+    if not kimi_cli_config.exists():
+        raise ChatServiceError(f"Kimi CLI config not found: {kimi_cli_config}")
+    if not repo_root.exists():
+        raise ChatServiceError(f"Kimi CLI repo root not found: {repo_root}")
+
+    prompt = build_aider_prompt(messages)
+
+    env = os.environ.copy()
+    env["HOME"] = "/data/kimi-cli/home"
+    env["PATH"] = "/data/kimi-cli/tool-bin:/data/kimi-cli/uv-bin:" + env.get("PATH", "")
+    env.setdefault("TMPDIR", "/data/tmp")
+
+    cmd = [
+        str(kimi_cli_path),
+        "--config-file", str(kimi_cli_config),
+        "--work-dir", str(repo_root),
+        "--print",
+        "--final-message-only",
+        "--prompt", prompt,
+    ]
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            cwd=str(repo_root),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+    except Exception as e:
+        raise ChatServiceError(f"Failed to start Kimi CLI: {e}")
+
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=kimi_cli_timeout)
+    except asyncio.TimeoutError:
+        process.kill()
+        await process.communicate()
+        raise ChatServiceError(f"Kimi CLI timed out after {kimi_cli_timeout}s")
+
+    stdout_text = stdout.decode("utf-8", errors="replace").strip()
+    stderr_text = stderr.decode("utf-8", errors="replace").strip()
+
+    if len(stdout_text) > kimi_cli_max_output_chars:
+        stdout_text = stdout_text[:kimi_cli_max_output_chars] + "\n...[truncated]"
+    if len(stderr_text) > 40000:
+        stderr_text = stderr_text[:40000] + "\n...[truncated]"
+
+    if process.returncode != 0:
+        detail = stderr_text or stdout_text or f"Kimi CLI failed with exit code {process.returncode}"
+        raise ChatServiceError(detail[:1500])
+
+    content = stdout_text or "Kimi CLI finished with no output."
+    if stderr_text:
+        content += "\n\n[KIMI CLI STDERR]\n" + stderr_text
+
+    return {
+        "choices": [{"message": {"content": content}}],
+        "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        },
+    }
+
 def truncate_messages_for_deepseek(messages: list[dict], max_chars: int = 28000) -> list[dict]:
     """Truncate messages to fit DeepSeek context window (~8000 tokens ≈ 28000 chars)"""
     total_chars = sum(len(m.get("content", "")) for m in messages)
@@ -199,9 +375,19 @@ def truncate_messages_for_deepseek(messages: list[dict], max_chars: int = 28000)
     return truncated
 
 
-async def call_model(model: str, messages: list[dict], max_tokens: int = 8192, temperature: float = 0.7) -> dict:
+async def call_model(
+    model: str,
+    messages: list[dict],
+    max_tokens: int = 8192,
+    temperature: float = 0.7,
+    project_key: Optional[str] = None,
+) -> dict:
     """Route to appropriate model"""
-    if model == "claude":
+    if model == "aider":
+        return await call_aider(messages, max_tokens, temperature, project_key=project_key)
+    elif model == "kimi":
+        return await call_kimi(messages, max_tokens, temperature)
+    elif model == "claude":
         return await call_claude(messages, max_tokens, temperature)
     elif model == "qwen":
         return await call_qwen(messages, max_tokens, temperature)
@@ -235,6 +421,72 @@ async def create_chat_completion(
             db, auth.workspace_id, request.session_id
         )
 
+        # Resolve sandbox project early for session context routing
+        sandbox_project_key = str(getattr(request, "project_key", "") or "").strip().lower()
+        if not sandbox_project_key:
+            sandbox_project_key = detect_project_key_from_messages(getattr(request, "messages", []) or []) or None
+        if sandbox_project_key:
+            try:
+                resolve_host_workspace(sandbox_project_key)
+            except Exception:
+                sandbox_project_key = None
+
+        # Ensure per-session context file exists
+        host_workspace = resolve_host_workspace(sandbox_project_key) if sandbox_project_key else Path("/data/session_contexts")
+        context_path = str(host_workspace / f"CONTEXT_{session.id}.md")
+        try:
+            import os
+            os.makedirs(os.path.dirname(context_path), exist_ok=True)
+            if not os.path.exists(context_path):
+                with open(context_path, "w", encoding="utf-8") as f:
+                    f.write(
+                        f"# Session {session.id}\n\n"
+                        "## Règle\n"
+                        "Lire ce fichier en premier. Le mettre à jour après chaque étape validée.\n\n"
+                        "## État\n"
+                        "(à remplir)\n\n"
+                        "## Décisions\n"
+                        "(à remplir)\n\n"
+                        "## Prochaine action\n"
+                        "(à remplir)\n"
+                    )
+        except Exception as e:
+            print(f"⚠ context init failed: {e}")
+
+        def _append_context_entry(role: str, content: str) -> None:
+            try:
+                from datetime import datetime
+                safe = (content or "").replace("\r\n", "\n").strip()
+                if len(safe) > 4000:
+                    safe = safe[:4000] + "\n...[truncated]"
+                ts = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                with open(context_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n\n---\n### {role} — {ts}\n{safe}\n")
+            except Exception as e:
+                print(f"⚠ context append failed ({role}): {e}")
+
+        def _clean_user_context_content(content: str) -> str:
+            try:
+                text = (content or "").replace("\r\n", "\n").strip()
+                if "[USER REQUEST]" in text:
+                    text = text.rsplit("[USER REQUEST]", 1)[1].strip()
+                if text.startswith("[MODE AUTO] Voici les résultats des commandes exécutées."):
+                    return ""
+                if text.startswith("[AUTO-EXEC RESULTS]"):
+                    return ""
+                return text
+            except Exception:
+                return str(content)
+
+        def _should_persist_user_message(content: str) -> bool:
+            try:
+                text = (content or "").strip()
+                return bool(text)
+            except Exception:
+                return False
+
+        original_request_messages = list(request.messages)
+
         # Get history if continuing session
         history = []
         if request.session_id:
@@ -248,11 +500,12 @@ async def create_chat_completion(
 
         # Add system prompt
         if not messages or messages[0].get('role') != 'system':
-            messages = [{'role': 'system', 'content': SYSTEM_PROMPT_HYPERFOCUS}] + messages
+            session_prompt = SYSTEM_PROMPT_HYPERFOCUS + f"\n\nSession ID: {session.id}\nFichier contexte: {context_path}\nLis ce fichier en premier avec: cat {context_path}\nLe fichier CONTEXT est géré automatiquement par le serveur. Ne le recrée pas, ne l'écrase pas et n'écris pas dedans, sauf demande explicite de l'utilisateur.\n"
+            messages = [{'role': 'system', 'content': session_prompt}] + messages
 
         # Inject persistent project memory
         try:
-            project_key = detect_project_key_from_messages(getattr(request, "messages", []) or [])
+            project_key = sandbox_project_key
             project_memory_text = await ensure_project_memory_current(
                 db, auth.workspace_id, project_key
             )
@@ -286,14 +539,18 @@ async def create_chat_completion(
                 messages = messages[:1] + [{"role": "user", "content": context}] + messages[1:]
 
         # Save user message(s)
-        for msg in request.messages:
+        for msg in original_request_messages:
             if msg.role == "user":
+                raw_user_content = _clean_user_context_content(str(msg.content))
+                if not _should_persist_user_message(raw_user_content):
+                    continue
                 await chat_service.save_message(
-                    db, session.id, msg.role, msg.content
+                    db, session.id, msg.role, raw_user_content
                 )
-                if not history and len(request.messages) == 1:
+                _append_context_entry("User", raw_user_content)
+                if not history and len(original_request_messages) == 1:
                     await chat_service.update_session_title(
-                        db, session.id, msg.content
+                        db, session.id, raw_user_content
                     )
 
         # Get model from request (default: deepseek)
@@ -308,6 +565,7 @@ async def create_chat_completion(
             messages=messages,
             max_tokens=max_tokens,
             temperature=request.temperature or 0.7,
+            project_key=sandbox_project_key,
         )
 
         # Extract response
@@ -323,6 +581,7 @@ async def create_chat_completion(
             assistant_content,
             token_count=usage.get("completion_tokens") if usage else None,
         )
+        _append_context_entry("Assistant", assistant_content)
 
         return ChatCompletionResponse(
             session_id=session.id,

@@ -31,6 +31,7 @@ from ..schemas import (
 )
 from ..services import artefact_service
 from ..services.project_memory import load_project_memory_text
+from ..services.runtime_projects import resolve_host_workspace
 
 router = APIRouter(prefix="/artefacts", tags=["Artefacts"])
 
@@ -219,13 +220,16 @@ async def import_from_sandbox(
     """Import a file from sandbox workspace to artefacts."""
     import os
     
-    # Map to host path - the sandbox workspace is mounted
-    project_key = (project_key or "cresus").strip().lower()
-    sandbox_workspace = f"/opt/philae/sandboxes/{project_key}/workspace"
+    # Map to host path via runtime project registry
+    project_key = (project_key or "").strip().lower() or "hyperfocus"
+    try:
+        sandbox_workspace = resolve_host_workspace(project_key)
+    except KeyError:
+        raise HTTPException(status_code=400, detail=f"Unknown project_key: {project_key}")
     
     # Clean filepath
     clean_path = filepath.replace("/workspace/", "").replace("/workspace", "").lstrip("/")
-    source_path = os.path.join(sandbox_workspace, clean_path)
+    source_path = os.path.join(str(sandbox_workspace), clean_path)
     
     if not os.path.exists(source_path):
         raise HTTPException(status_code=404, detail=f"File not found: {filepath}")

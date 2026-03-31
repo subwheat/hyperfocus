@@ -49,8 +49,8 @@ class PTYProcess:
 
         if pid == 0:
             # Child process
-            env_file = "/data/workspaces/acp-lab/worktree/.env"
-            if os.path.exists(env_file):
+            env_file = os.getenv("HYPERFOCUS_TERMINAL_ENV_FILE", "").strip()
+            if env_file and os.path.exists(env_file):
                 with open(env_file) as f:
                     for line in f:
                         line = line.strip()

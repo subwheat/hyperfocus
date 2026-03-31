@@ -54,6 +54,7 @@ class ChatRequest(BaseModel):
     max_tokens: Optional[int] = Field(None, ge=1, le=16384)
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
     artefact_ids: Optional[list[str]] = None  # IDs des PJ à injecter
+    project_key: Optional[str] = None  # Projet runtime explicite pour le routage chat
     model: Optional[str] = "deepseek"  # Model to use: deepseek, claude, qwen
 
 

@@ -250,17 +250,12 @@ class ChatService:
 
         """
 
-        # --- Hyperfocus system prompt (forced) ---
-
-        # Remove any incoming system prompts (default DeepSeek, etc.)
-
-        messages = [m for m in (messages or []) if isinstance(m, dict) and m.get("role") != "system"]
-
-        # Add Hyperfocus as the ONLY system message
-
-        messages = [{"role": "system", "content": SYSTEM_PROMPT_HYPERFOCUS}] + messages
-
-        # ----------------------------------------
+        # --- Hyperfocus system prompt ---
+        # Keep an existing system prompt if one is already present.
+        messages = [m for m in (messages or []) if isinstance(m, dict)]
+        if not messages or messages[0].get("role") != "system":
+            messages = [{"role": "system", "content": SYSTEM_PROMPT_HYPERFOCUS}] + messages
+        # -----------------------------------
 
 
         payload = {
@@ -319,12 +314,12 @@ class ChatService:
         Send streaming completion request to vLLM.
         Yields content chunks as they arrive.
         """
-        # --- Hyperfocus system prompt (forced) ---
-        # Drop ANY incoming system prompts (default DeepSeek, etc.)
-        messages = [m for m in (messages or []) if isinstance(m, dict) and m.get("role") != "system"]
-        # Add Hyperfocus as the ONLY system message
-        messages = [{"role":"system","content": SYSTEM_PROMPT_HYPERFOCUS}] + messages
-        # ----------------------------------------
+        # --- Hyperfocus system prompt ---
+        # Keep an existing system prompt if one is already present.
+        messages = [m for m in (messages or []) if isinstance(m, dict)]
+        if not messages or messages[0].get("role") != "system":
+            messages = [{"role":"system","content": SYSTEM_PROMPT_HYPERFOCUS}] + messages
+        # -----------------------------------
 
         payload = {
             "model": settings.vllm_model,
